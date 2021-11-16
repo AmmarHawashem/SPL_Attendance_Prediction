@@ -37,6 +37,10 @@ https://ammarhawashem.github.io/SPL_Attendance_Prediction/CapstoneFinalVersion.h
 4- The "CapstoneFinalVersion" file 
 
   The file that have the EDA, feature engineering, modeling, results, & conclusion
+  
+5- The "SPL" folder
+
+contains the indivisual seasosn dataset that is used intially in the "PreCapstone" file
 
 
  
