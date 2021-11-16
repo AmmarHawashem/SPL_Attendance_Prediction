@@ -42,7 +42,7 @@ https://ammarhawashem.github.io/SPL_Attendance_Prediction/CapstoneFinalVersion.h
  
 ## **Data**
 
-* The dataframe uthat has all the features  "SPL.csv"
+* The dataframe uthat has all the features  "SPL_F1.csv"
 
 
 
