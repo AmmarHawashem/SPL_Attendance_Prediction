@@ -1,0 +1,1179 @@
+---
+title: "DS_Capstone"
+author: "Ammar Al-Hawashem"
+date: "11/6/2021"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_float: true
+---
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## **Part1: Introduction**
+
+### What is the project?
+The project is to build  Machine Learning models that predict the number of attendance of each Weekly game of Suadi Professional League (SPL). 1861 games are used to build the models which represent all the attendance records since it became mandatory in 2010 until the suspension of the league due to COVID19 in 03/2020.
+
+ Information  | Description
+-------- | -------------
+Problem type  | Supervised Regression
+Response variable  | The number of attendance of a weekly game
+Features| 17
+Observations | 1861
+Objective | Use Some features to predict the attendance
+
+### What is the Goal of the project?
+Can we predict the attendance of an SPL game?
+How does SPL attendance vary with changing the pre & within season variables?
+
+### Who are the targeted audience?
+
+This project can be useful for many sectors such as:
+
+- The commercial campaigns  to forecast the right time to publish a commercial.
+- The home team to control the ticket prices and to forecast the right time to initialize some activities.
+-  The responsible committee within the Saudi Football federation to avoid scheduling matches at  environmental conditions that may have negative effects to  attendance number.
+
+
+### What are the features?
+ Variable  | Description
+-------- | -------------
+1- Week  | The fixture (Round) [1-26] & [1-30]
+2- Home | The name of the home team
+3- Away | The name of the away team
+4-Venue | The stadium name
+5-Capacity | of the venue 
+6-H_Followers | The number of twitter followers for the Home Team (assumed to be constant)
+7-A_Followers | The number of twitter followers for the Away Team  (assumed to be constant)
+8-Rank_H | Position  of Home Team before the this week (1-14) & (1-16)
+9-Rank_A | Position of Away Team before the this week
+10- RankDiff | The rank difference between the Home & Away Teams
+11-Period | Is it Daytime or  night time (17:00 is used to separate)
+12-Weekend | Were the game played on a weekend day? (Thus, Fri, Sat + Holidays)
+13-TemperatureC | The temperature(Celsius) in the day and time of the match 
+14-RH | % of Relative Humidity (estimated from the Temperature and Dew Point)
+15-Families | Were women were allowed to attend? (12-01-2018)
+16- LaggedAttendance | Attendance one home match earlier 
+17- GameImp | Game importance (4 categories)
+
+### What is the target?
+Attendance | The number of spectators in that game
+
+### Resources
+ Variable  | Link
+-------- | -------------
+The Base Data  | https://github.com/alioh/Saudi-Professional-League-Datasets
+Attendance & Venue[1] |https://fbref.com/en/comps/70/749/schedule/2014-2015-Saudi-Professional-League-Scores-and-Fixtures
+Attendance & Venue[2] | https://web.archive.org/web/20160705031432/http:/slstat.com/spl2010-2011ar/attendance.php
+Ranks[1] | https://web.archive.org/web/20160721071334/http:/www.slstat.com/spl2013-2014ar/alltable.php
+Ranks[2] | https://www.transfermarkt.com/saudi-professional-league/spieltagtabelle/wettbewerb/SA1/saison_id/2017/spieltag/2
+Temperature & Relative Humidity[1] | https://www.kaggle.com/esraamadi/saudi-arabia-weather-history
+Temperature & Relative Humidity[2] | https://datasource.kapsarc.org/explore/dataset/saudi-hourly-weather-data
+
+
+
+### Load the necessary libraries
+```{r echo = T, results = 'hide'}
+
+library(tidyverse)
+library(tidymodels)
+library(gbm)      # for original implementation of regular and stochastic GBMs
+library(h2o)      # for a java-based implementation of GBM variants
+library(xgboost)  # for fitting extreme gradient boosting
+library(rsample)
+library(visdat)
+library(naniar)   # To visualize missing values
+library(GGally)
+library(corrplot)
+library(themis) 
+library(ranger)   
+library(knitr)
+library(rpart.plot)
+library(chron)
+library(lubridate) # To deal with dates and time
+library(stringr)
+library(stats)
+library(vip)       # For the importance of features
+library(finetune)  # To do tune_race_anova (a race method)
+library(e1071)     # for skewness calculations
+
+```
+### Import the dataset
+Let's Load the  dataset to our environment: 
+
+```{r}
+SPL <- readr::read_csv("SPL_F1.csv")
+```
+
+## **Part2: Study the dataset**
+
+### Skim the dataset
+I Always like to use skimr::skim() to have a great view of the data:
+
+```{r}
+skimr::skim(SPL)
+```
+### Convert s into factors
+They're are some factor featurees assigned as character so let's convert them
+```{r}
+SPL$Families <- as.factor(SPL$Families)
+SPL$Period <- as.factor(SPL$Period)
+SPL$Weekend <- as.factor(SPL$Weekend)
+SPL$GameImp <- as.factor(SPL$GameImp)
+SPL$Season <- as.factor(SPL$Season)   #  not  a feature
+
+```
+
+
+Let's focus in our features and target 
+
+```{r}
+#1st let's git red of the only match that have 0 attendance as a penalty in both rhe attendance and the lagged attendance
+#2nd: let's take just our features and target + the Date as an index that can be used
+
+
+SPL %>%
+  filter(Attendance>0,
+         Index != 714
+) %>%
+  select(Date,
+         Week,
+         Home,
+         Away,
+         Venue,
+         Capacity,
+         H_Followers,
+         A_Followers,
+         Rank_H,
+         Rank_A,
+         Families,
+         Period ,
+         Weekend ,
+         TemperatureC,
+         RH,
+         Attendance,
+         LaggedAttendance,
+         RankDiff,
+         GameImp) -> SPL_DF
+```
+
+
+
+###  How many observations have missing values?
+
+```{r}
+sum(is.na(SPL_DF))
+```
+
+All of them for the lagged attendance as "skim" has shown
+
+
+### Discover correlation
+Discover the correlation between the features themselves and between them and the target.
+
+```{r}
+# We have to exclude the NA's and the non numeric features
+SPL_DF %>% 
+  filter(LaggedAttendance >0) %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+ corrplot()
+  
+```
+
+we can notice that the Ranks correlates negatively with the followers (the leading teams have more twitter followers which makes sense). Moreovee and obvisuioly, there is a high correlation between the attendance nad the lagged one.
+
+### Discover Skewness
+To see if there are variables need to be transformed
+```{r}
+SPL_DF %>% 
+  select(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free")+
+  geom_density(color = "blue", fill = "red") 
+# Scale free will let ezch plot has its own appropriate x & y axis values
+```
+
+There are some variables that really right skewed
+
+Let's see what is the best transformation for each one 
+```{r}
+SPL_DF %>% 
+  filter(Attendance >0, LaggedAttendance!=0) ->SPL1
+#Skewness is estimated by using one of Joanes and Gill (1998) methods
+
+
+#Choose the closest to 0 for each one
+
+#Attendance
+skewness(SPL1$Attendance, type = 2)
+skewness(log(SPL1$Attendance), type = 2)
+skewness(sqrt(SPL1$Attendance), type = 2)
+skewness((SPL1$Attendance)^(1/3), type = 2)
+# Log is the lowest
+
+
+#Lagged Attendance
+skewness(SPL1$LaggedAttendance, type = 2)
+skewness(log(SPL1$LaggedAttendance), type = 2)
+skewness(sqrt(SPL1$LaggedAttendance), type = 2)
+skewness((SPL1$LaggedAttendance)^(1/3), type = 2, na.rm = T )
+# Log is the lowest
+
+# Twitter followers
+skewness(SPL1$H_Followers, type = 2)
+skewness(log(SPL1$H_Followers), type = 2)
+skewness(sqrt(SPL1$H_Followers), type = 2)
+skewness((SPL1$H_Followers)^(1/3), type = 2)
+# Log is the lowest
+
+# Capacity
+skewness(SPL1$Capacity, type = 2)
+skewness(log(SPL1$Capacity), type = 2)
+skewness(sqrt(SPL1$Capacity), type = 2)
+skewness((SPL1$Capacity)^(1/3), type = 2)
+# Square root is the lowest
+
+
+# RankDifference
+skewness(SPL1$RankDiff, type = 2)
+skewness(log(SPL1$RankDiff), type = 2)
+skewness((SPL1$RankDiff)^(1/2), type = 2)
+skewness((SPL1$RankDiff)^(1/3), type = 2)
+# Square root is the lowest
+
+# Relative Humidirity
+skewness(SPL1$RH, type = 2)
+skewness(log(SPL1$RH), type = 2)
+skewness(sqrt(SPL1$RH), type = 2)
+skewness((SPL1$RH)^(1/3), type = 2)
+# Square root is the lowest
+
+
+
+```
+
+
+  
+Let's apply the best transformation
+```{r}
+SPL_DF %>% 
+  select(is.numeric) %>% 
+  mutate(Attendance = log(Attendance),
+         LaggedAttendance = log(LaggedAttendance),
+         A_Followers = log(A_Followers),
+         H_Followers = log(H_Followers),
+         Capacity = sqrt(Capacity),
+         RH = sqrt(RH),
+         RankDiff = sqrt(RankDiff)
+                           ) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free")+
+  geom_density(color = "blue", fill = "red") 
+
+
+```
+
+
+## **Part3: EDA**
+Discover how the attendance changes with the rank & week
+```{r}
+#Need to be revised 
+SPL %>%
+  mutate(Rank_H = factor(Rank_H)) %>%
+  filter(Week >=2 & Week<=26) %>% 
+ggplot( aes(x=Rank_H, y=Attendance, fill=Rank_H))+
+  geom_bar(stat='identity',show.legend = FALSE) +
+  facet_wrap(~Week, ncol = 5) +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(n.dodge=3))+
+  labs(
+    x = "Rank",
+    y = "Total  SPL game attendance of all seasons")
+# HOW To make it include all the attendance
+
+```
+
+
+Discover how the attendance changes with changing the ranks of both Home & Away Teams
+```{r}
+SPL %>% 
+   filter(Rank_H <=14, Rank_A<=14) %>% 
+  mutate(Rank_H = factor(Rank_H)) %>% 
+  group_by(Rank_H, Rank_A) %>% 
+  filter( Rank_H !=Rank_A ) %>% 
+  summarise(Tot = sum(Attendance)) %>% 
+  ggplot( aes(x=Rank_H, y=Tot, fill=Rank_H))+
+  geom_bar(stat='identity') +
+  facet_wrap(~Rank_A, ncol = 5, scales = "free") +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(n.dodge=3))+
+  labs(
+    x = "Rank of Home team",
+    y = "TotalSPL game attendance of all seasons")
+
+```
+
+Discover how the attendance changes with the increase of twitter followers of the Home team
+```{r}
+SPL %>% 
+group_by(H_Followers) %>% 
+  summarise(Attendance = sum(Attendance)) -> WeeklyAtt
+
+
+  ggplot(WeeklyAtt, aes(x=log(H_Followers),
+                        y=Attendance, 
+                        color = "blue",
+                        size = 3)) +
+  geom_point(show.legend = FALSE, outlier.alpha = 0.5) +
+  labs(
+    x = "natural log of H_followers ",
+    y = "Total attendance",
+    title = "Total Attednacne Vs Home Twitter Followers")
+```
+
+
+
+Discover which Venues have high attendance average without counting for their capacities
+```{r}
+SPL %>% 
+  group_by(Venue) %>% 
+  summarise(ToT = sum(Attendance)) -> tot
+SPL %>% 
+  group_by(Venue) %>% 
+  count() -> SUM
+
+tot %>% 
+  mutate( Games = SUM$n) -> mergeVenue
+mergeVenue %>% 
+  mutate(Average = ToT/Games) %>% 
+  mutate(Venue = factor(Venue)) ->mergeVenue
+remove(tot)
+
+ggplot(mergeVenue, aes(x=Venue,
+                 y=Average, color = Venue
+                 ))+
+         geom_point(alpha =0.75,
+                    shape = 16,  show.legend = FALSE,
+                    size = 3) +
+  labs(title = "Avergae Attendance of Venues") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) # This is to rotate the x labels since the names are long
+```
+
+
+Weekly attendance
+```{r}
+SPL %>% 
+  filter(!Season =="s19") %>% 
+  filter(Week<27) %>% 
+     mutate(Week = factor(Week))->WeeklyAtt 
+   
+  
+  ggplot(WeeklyAtt, aes(x=Week, y=Attendance, fill =Week))+
+  geom_boxplot(show.legend = FALSE, outlier.alpha = 0.5) +
+  labs(
+    x = "Week of SPL season",
+    y = "Weekly SPL game attendance",
+    title = "Weekly Attendance")
+```
+It was expected to have many extreme values since there are many other factors. However, ther are some interesting results with the IQR sucn as week 14, 22, & 26
+
+ Total Weekly Attendance
+```{r}
+
+SPL %>% 
+  filter(!Season =="s19") %>% 
+  filter(Week<27) %>% 
+  group_by(Week = factor(Week)) %>% 
+  summarise(Attendance = sum(Attendance)) -> WeeklyAtt
+
+
+  ggplot(WeeklyAtt, aes(x=Week, y=Attendance, fill = Week)) +
+  geom_bar(show.legend = FALSE, outlier.alpha = 0.5,stat='identity') +
+  labs(
+    x = "Week of SPL season",
+    y = " Total weekly attendance of SPL",
+    title = " Total Weekly Attendance")
+```
+
+- Week 4 represents an interesting result!
+- Week 22 represents an unexpected result! since it is low
+- Week 26 is expected since the champion usually will separate after the match, and if there were two teams still have hope to be the champion, the attendance will be higher.
+
+
+
+
+Does weekend(Thursday-Friday,Saturday) have an effect?
+```{r}
+SPL %>% 
+  group_by(Weekend) %>% 
+  summarise(ToT = sum(Attendance)) -> tot
+SPL %>% 
+  group_by(Weekend) %>% 
+  count() -> SUM
+tot %>% 
+  mutate( Games = SUM$n) -> mergeVenue
+mergeVenue %>% 
+  mutate(Average = ToT/Games) ->mergeVenue
+remove(tot)
+  
+  ggplot(mergeVenue, aes(x=Weekend, y=Average, fill =Weekend))+
+geom_bar(stat='identity') +
+  labs(
+    x = "Weekend or NOT",
+    y = "Average SPL game attendance")
+
+```
+
+Surprisingly, the average for the weekday is slightly higher than the weekend! However, Remember that they are imbalanced (460/1401).
+
+
+Does the period (nighttime/daytime) have an effect?
+```{r}
+SPL %>% 
+  group_by(Period) %>% 
+  summarise(ToT = sum(Attendance)) -> tot
+SPL %>% 
+  group_by(Period) %>% 
+  count() -> SUM
+tot %>% 
+  mutate( Games = SUM$n) -> mergeVenue
+mergeVenue %>% 
+  mutate(Average = ToT/Games) ->mergeVenue
+remove(tot)
+  
+  ggplot(mergeVenue, aes(x=Period, y=Average, fill =Period))+
+geom_bar(stat='identity') +
+  labs(
+    x = "Dat time or nigh time",
+    y = "Average SPL game attendance")
+```
+
+The attendance at nighttime is much higher than the attendance in the daytime.
+
+
+Let's now study both of them at the same time
+```{r}
+SPL %>% 
+  group_by(Weekend, Period) %>% 
+  summarise(ToT = sum(Attendance)) -> tot
+SPL %>% 
+  group_by(Weekend, Period) %>% 
+  count() -> SUM
+tot %>% 
+  add_column( Games = SUM$n) -> mergeVenue
+mergeVenue %>% 
+  mutate(Average = ToT/Games) ->mergeVenue
+remove(tot)
+  
+  ggplot(mergeVenue, aes(x=Weekend, y=Average, fill =Period))+
+geom_bar(stat='identity') +
+  labs(
+    x = "Weekend or NOT",
+    y = "Average SPL game attendance")
+
+```
+
+Conclusions:
+- The average attendance at nighttime is almost the same(slightly higher at nighttime)
+- The average attendance in daytime is higher in the weekends which is expected 
+
+ 
+ 
+ 
+Do women attendance have an effect?
+```{r}
+SPL %>% 
+  group_by(Families) %>% 
+  summarise(ToT = sum(Attendance)) -> tot
+SPL %>% 
+  group_by(Families) %>% 
+  count() -> SUM
+tot %>% 
+  mutate( Games = SUM$n) -> mergeVenue
+mergeVenue %>% 
+  mutate(Average = ToT/Games) ->mergeVenue
+remove(tot)
+  
+  ggplot(mergeVenue, aes(x=Families, y=Average, fill =Families))+
+geom_bar(stat='identity') +
+  labs(
+    x = "Were women allowed to attend?",
+    y = "Average SPL game attendance")
+```
+Total attendance in each season
+```{r}
+SPL %>%
+filter(!Season ==2019) %>%
+  mutate(Home = factor(Home)) %>%
+ggplot( aes(x=Season, y=Attendance, fill=Season))+
+  geom_bar(stat='identity') +
+  labs(
+    x = "Season",
+    y = "Total SPL game attendance")
+  
+```
+
+
+As shown above, it seems women have a positive effect but remember that data are imbalanced and represents specific seasons. Therefore, since women introduced exactly at the middle of season 2017, let's check it:
+```{r}
+SPL %>%
+  filter(Season == 2017) %>%
+  group_by(Families) %>%
+  ggplot( aes(x=Families, y= Attendance, fill =Families))+
+geom_bar(stat='identity') +
+  labs(
+    x = "Were women allowed to attend?",
+    y = "Total SPL game attendance")
+```
+They are equal, so no conclusion neither to deny nor to confirm its effects
+
+
+Note: The highest attendance is in s18 maybe because it has two additional teams which led to 58 additional match (240-182)  
+
+
+The total attendance of each Team when it is Home (include Away team's attendance)
+```{r}
+SPL %>%  
+filter(!Season ==2019) %>% 
+  mutate(Home = factor(Home)) %>% 
+ggplot( aes(x=Season, y=Attendance, fill=Season))+
+  geom_bar(stat='identity',show.legend = FALSE) +
+  facet_wrap(~Home, ncol = 6, scales= "free_y") +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(n.dodge=3)) +
+  labs(
+    x = "Season",
+    y = "Total SPL game attendance") + 
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) # This is to rotate the x labels since the seasons will overlap
+```
+
+Similarly, The total attendance of each Team when it is Away (include Away Home's attendance)
+```{r}
+SPL %>%  
+filter(!Season ==2019) %>% 
+  mutate(Home = factor(Away)) %>% 
+ggplot( aes(x=Season, y=Attendance, fill=Season))+
+  geom_bar(stat='identity',show.legend = FALSE) +
+  facet_wrap(~Home, ncol = 6, scales= "free_y") +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(n.dodge=3)) +
+  labs(
+    x = "Season",
+    y = "Total SPL game attendance") + 
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) # This is to rotate the x labels since the seasons will overlap
+```
+
+However, seasons will not be considered as a feature in our model since we are seeking a general one.
+
+
+## **Part4: Build models with CV folds resmapling**
+
+
+# Split
+```{r}
+
+SPL_DF %>%
+  select(- Date) %>%
+  mutate(Attendance = log(Attendance),
+         LaggedAttendance = log(LaggedAttendance),
+         H_Followers = log(H_Followers),
+         A_Followers = log(A_Followers),
+         Capacity = sqrt(Capacity),
+         RH = sqrt(RH),
+         RankDiff = sqrt(RankDiff)) %>%
+  mutate_if(is.character, factor)-> SPL_F_DF
+
+#Let's split our dataset into training and testing sets
+set.seed(1234) # For reproducibility
+SPLIT <- initial_split(SPL_F_DF, strata = Attendance) 
+TRAIN <- training(SPLIT) 
+TEST <- testing(SPLIT) 
+
+#Resampling folds
+set.seed(1234)
+FOLDS <- vfold_cv(TRAIN, strata =  Attendance)
+# I've used bootstraps instead of cv folds for up-sampling purposes
+
+
+
+```
+# Models
+## Model_4.1: Random Forest
+
+```{r}
+ # Recipe is used to build the feature engineering steps. We have to specify the formula and the data which is the training 
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_numeric_predictors()) %>% 
+  step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_numeric_predictors()) %>%
+  step_other(Venue) %>% 
+ step_dummy(all_nominal_predictors()) -> ranger_recipe
+
+# I'll tune:
+# 1- the depth (think of it as the number the number of questions)
+# 2- the minumum number of observations in the terminal nodes(leaves)
+# 3- Number of trees
+  rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("ranger")-> ranger_spec
+
+# The workflow is just like a storage of our model's bits
+  workflow() %>% 
+  add_recipe(ranger_recipe) %>% 
+  add_model(ranger_spec) -> ranger_workflow
+
+
+set.seed(51510)
+ranger_tune<-
+   tune_grid(ranger_workflow,
+             resamples = FOLDS, 
+             grid =10) # to choose 10 grid points automatically
+
+# Let's see the result of the loss functions and the tuning results
+show_best(ranger_tune, metric = "rmse")
+show_best(ranger_tune, metric = "rsq")
+autoplot(ranger_tune)
+```
+
+```{r}
+# Let's take the best result and use it to update our model to finalize it 
+final_rf <- ranger_workflow %>%
+  finalize_workflow(select_best(ranger_tune, metric = "rmse"))
+
+# "last fit" will evaluate in the training then assesses it on the test set
+fitRF <- last_fit(final_rf, SPLIT)
+fitRF
+collect_metrics(fitRF)
+
+# Let's plot the prediction Vs Truth values of attendance
+collect_predictions(fitRF) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# Since Random Forest is not that easy to interpret, let's use an alternative way to discover our feature by using the vip package:
+imp_spec <- ranger_spec %>%
+  finalize_model(select_best( ranger_tune)) %>%
+  set_engine("ranger", importance = "permutation")
+
+workflow() %>%
+  add_recipe(ranger_recipe) %>%
+  add_model(imp_spec) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+```
+
+
+## Model_4.2: GLMNET
+ Let's try another algorithm which is generalized linear model (GLMNET)
+ Which is Regularized linear model
+ 
+ 
+ 
+```{r}
+
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_numeric_predictors()) %>% 
+    step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_numeric_predictors()) %>%
+  step_other(Venue) %>% 
+ step_dummy(all_nominal_predictors()) -> glmnet_recipe
+
+  # Tuning parameters:
+# 1- penalty or lambda which is usally 0.01, 10, 100, etc
+# 2- Mixture or alpha which is the type of pnelaty: Lasso(1), Ridge(0), or a mixture
+  linear_reg(penalty = tune(), mixture = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("glmnet") -> glmnet_spec
+
+  
+  workflow() %>% 
+  add_recipe(glmnet_recipe) %>% 
+  add_model(glmnet_spec) -> glmnet_workflow
+
+glmnet_grid <- tidyr::crossing(penalty = 10^seq(-6, -1, length.out = 20), mixture = c(0.05, 0.2, 0.4, 0.6, 0.8, 1))
+
+# I'll use a racing method to eliminate the combinations that did awful in the initial resamples. 
+glmnet_tune<- 
+  tune_race_anova(glmnet_workflow, resamples = FOLDS, grid = glmnet_grid)
+
+show_best(glmnet_tune, metric = "rmse")
+show_best(glmnet_tune, metric = "rsq")
+autoplot(glmnet_tune)
+```
+
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_GL <- glmnet_workflow %>%
+  finalize_workflow(select_best(glmnet_tune, metric = "rmse"))
+
+fit_GL <- last_fit(final_GL, SPLIT)
+fit_GL
+collect_metrics(fit_GL)
+
+# This one is higher than the random forest model but the training and testing both have the same rmse which is 0.83
+# 
+# Let's plot the prediction Vs Truth values of attendance
+
+collect_predictions(fit_GL) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+
+imp_spec_glmLog <- glmnet_spec %>%
+  finalize_model(select_best(glmnet_tune)) %>%
+  set_engine("glmnet", importance = "permutation")
+
+workflow() %>%
+  add_recipe(glmnet_recipe) %>%
+  add_model(imp_spec_glmLog) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+```
+
+
+## Model_4.3 XG Boots
+Let's try a third algorithm which am XGBoot
+
+```{r}
+ 
+
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_predictors())  %>%  
+    step_impute_median(LaggedAttendance) %>% 
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) -> xgboost_recipe
+ #XGBoot prefers one hot than dummy variables
+
+  boost_tree(trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), 
+    loss_reduction = tune(), sample_size = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("xgboost") -> xgboost_spec
+
+
+xgboost_workflow <- 
+  workflow() %>% 
+  add_recipe(xgboost_recipe) %>% 
+  add_model(xgboost_spec) 
+
+set.seed(81043)
+xgboost_tune <-
+  tune_grid(xgboost_workflow,
+                  resamples = FOLDS,
+                  grid = 10,
+                 )
+
+show_best(xgboost_tune, metric = "rmse")
+show_best(xgboost_tune, metric = "rsq")
+autoplot(xgboost_tune)
+```
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_XG <- xgboost_workflow %>%
+  finalize_workflow(select_best(xgboost_tune, metric = "rmse"))
+
+fit_XG <- last_fit(final_XG, SPLIT)
+fit_XG
+collect_metrics(fit_XG)
+
+collect_predictions(fit_XG) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# VIP 
+imp_spec_XG <- xgboost_spec %>%
+  finalize_model(select_best(xgboost_tune)) %>%
+  set_engine("xgboost", importance = "permutation")
+
+workflow() %>%
+  add_recipe(xgboost_recipe) %>%
+  add_model(imp_spec_XG) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+
+```
+
+## Model_4.4 KNN
+Let's try a forth algorithm which is KNN
+
+```{r}
+#Recipe
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_zv(all_predictors()) %>% 
+    step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_predictors(), -all_nominal()) %>% 
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes()) -> knn_recipe
+#Specification
+ nearest_neighbor(neighbors = tune()) %>%
+  set_engine("kknn") %>%
+  set_mode("regression") -> knn_spec
+ 
+ # Workflow
+  workflow() %>% 
+  add_recipe(knn_recipe) %>% 
+  add_model(knn_spec) -> knn_workflow
+  
+  # Create grid of hyperparameter values
+knn_grid <- expand.grid(neighbors = seq(1, 100, by = 4))
+
+knn_tune <-
+  tune_race_anova(knn_workflow,
+                  resamples = FOLDS,
+                  grid = knn_grid,
+                  )
+
+show_best(knn_tune, metric = "rmse")
+show_best(knn_tune, metric = "rsq")
+autoplot(knn_tune)
+ 
+ 
+```
+
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_knn <- knn_workflow %>%
+  finalize_workflow(select_best(knn_tune, metric = "rmse"))
+
+fit_knn <- last_fit(final_knn, SPLIT)
+fit_knn
+collect_metrics(fit_knn)
+
+collect_predictions(fit_knn) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# VIP 
+imp_spec_knn <- knn_spec %>%
+  finalize_model(select_best(knn_tune, metric = "rmse")) %>%
+  set_engine("kknn", importance = "permutation")
+
+
+
+```
+
+
+## **Part5: Build models with Bootstrapping resmapling**
+
+
+# Split
+```{r}
+
+
+
+set.seed(1234)
+FOLDS_B <- bootstraps(TRAIN, strata =  Attendance)
+# I've used bootstraps instead of cv folds for up-sampling purposes
+
+
+
+```
+# Models_Bootstraping
+## Model_5.1: Random Forest
+
+```{r}
+ # Recipe is used to build the feature engineering steps. We have to specify the formula and the data which is the training 
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_numeric_predictors()) %>% 
+  step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_numeric_predictors()) %>%
+  step_other(Venue) %>% 
+ step_dummy(all_nominal_predictors()) -> ranger_recipe_B
+
+# I'll tune:
+# 1- the depth (think of it as the number the number of questions)
+# 2- the minumum number of observations in the terminal nodes(leaves)
+# 3- Number of trees
+  rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("ranger")-> ranger_spec_B
+
+# The worflow is just like a storage of our model's bits
+  workflow() %>% 
+  add_recipe(ranger_recipe_B) %>% 
+  add_model(ranger_spec_B) -> ranger_workflow_B
+
+# I'll use a racing method to eliminate the combinations that did awful in the initial resamples. 
+set.seed(51510)
+ranger_tune_B<-
+   tune_grid(ranger_workflow_B,
+             resamples = FOLDS_B, 
+             grid =10) # to choose 10 grid points automatically
+
+# Let's see the result of the loss functions and the tuning results
+show_best(ranger_tune_B, metric = "rmse")
+show_best(ranger_tune_B, metric = "rsq")
+autoplot(ranger_tune_B)
+```
+
+```{r}
+# Let's take the best result and use it to update our model to finalize it 
+final_rf_B <- ranger_workflow_B %>%
+  finalize_workflow(select_best(ranger_tune_B, metric = "rmse"))
+
+# "last fit" will evaluate in the training then assesses it on the test set
+fitRF_B <- last_fit(final_rf_B, SPLIT)
+fitRF_B
+collect_metrics(fitRF_B)
+
+# Let's plot the prediction Vs Truth values of attendance
+collect_predictions(fitRF_B) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# Since Random Forest is not that easy to interpret, let's use an alternative way to discover our feature by using the vip package:
+imp_spec_B <- ranger_spec_B %>%
+  finalize_model(select_best( ranger_tune_B)) %>%
+  set_engine("ranger", importance = "permutation")
+
+workflow() %>%
+  add_recipe(ranger_recipe_B) %>%
+  add_model(imp_spec_B) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+```
+
+
+## Model_5.2: GLMNET
+ Let's try another algorithm which is generalized linear model (GLMNET)
+ Which is Regularized linear model
+ 
+ 
+ 
+```{r}
+
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_numeric_predictors()) %>% 
+    step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_numeric_predictors()) %>%
+  step_other(Venue) %>% 
+ step_dummy(all_nominal_predictors()) -> glmnet_recipe_B
+
+  # Tuning parameters:
+# 1- penalty or lambda which is usally 0.01, 10, 100, etc
+# 2- Mixture or alpha which is the type of pnelaty: Lasso(1), Ridge(0), or a mixture
+  linear_reg(penalty = tune(), mixture = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("glmnet") -> glmnet_spec_B
+
+  
+  workflow() %>% 
+  add_recipe(glmnet_recipe_B) %>% 
+  add_model(glmnet_spec_B) -> glmnet_workflow_B
+
+glmnet_grid_B <- tidyr::crossing(penalty = 10^seq(-6, -1, length.out = 20), mixture = c(0.05, 0.2, 0.4, 0.6, 0.8, 1))
+
+# I'll use a racing method to eliminate the combinations that did awful in the initial resamples. 
+glmnet_tune_B<- 
+  tune_race_anova(glmnet_workflow_B, resamples = FOLDS_B, grid = glmnet_grid_B)
+
+show_best(glmnet_tune_B, metric = "rmse")
+show_best(glmnet_tune_B, metric = "rsq")
+autoplot(glmnet_tune_B)
+```
+
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_GL_B <- glmnet_workflow_B %>%
+  finalize_workflow(select_best(glmnet_tune_B, metric = "rmse"))
+
+fit_GL_B <- last_fit(final_GL_B, SPLIT)
+fit_GL_B
+collect_metrics(fit_GL_B)
+
+# This one is higher than the random forest model but the training and testing both have the same rmse which is 0.83
+# 
+# Let's plot the prediction Vs Truth values of attendance
+
+collect_predictions(fit_GL_B) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+
+imp_spec_glm_B <- glmnet_spec_B %>%
+  finalize_model(select_best(glmnet_tune_B)) %>%
+  set_engine("glmnet", importance = "permutation")
+
+workflow() %>%
+  add_recipe(glmnet_recipe_B) %>%
+  add_model(imp_spec_glm_B) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+```
+
+
+## Model_5.3 XG Boots
+Let's try a third algorithm which am XGBoot
+
+```{r}
+ 
+
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_nzv(all_predictors())  %>%  
+    step_impute_median(LaggedAttendance) %>% 
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) -> xgboost_recipe_B
+ #XGBoot prefers one hot than dummy variables
+
+  boost_tree(trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), 
+    loss_reduction = tune(), sample_size = tune()) %>% 
+  set_mode("regression") %>% 
+  set_engine("xgboost") -> xgboost_spec_B
+
+
+xgboost_workflow_B <- 
+  workflow() %>% 
+  add_recipe(xgboost_recipe_B) %>% 
+  add_model(xgboost_spec_B) 
+
+set.seed(81043)
+xgboost_tune_B <-
+  tune_grid(xgboost_workflow_B,
+                  resamples = FOLDS_B,
+                  grid = 10,
+                  )
+
+show_best(xgboost_tune_B, metric = "rmse")
+show_best(xgboost_tune_B, metric = "rsq")
+autoplot(xgboost_tune_B)
+```
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_XG_B <- xgboost_workflow %>%
+  finalize_workflow(select_best(xgboost_tune, metric = "rmse"))
+
+fit_XG_B <- last_fit(final_XG_B, SPLIT)
+fit_XG_B
+collect_metrics(fit_XG_B)
+
+collect_predictions(fit_XG_B) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# VIP 
+imp_spec_XG_B <- xgboost_spec_B %>%
+  finalize_model(select_best(xgboost_tune_B)) %>%
+  set_engine("xgboost", importance = "permutation")
+
+workflow() %>%
+  add_recipe(xgboost_recipe_B) %>%
+  add_model(imp_spec_XG_B) %>%
+  fit(TRAIN) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+
+```
+
+## Model_5.4 KNN
+Let's try a forth algorithm which is KNN
+
+```{r}
+#Recipe
+  recipe(formula = Attendance ~ ., data = TRAIN) %>% 
+  step_zv(all_predictors()) %>% 
+    step_impute_median(LaggedAttendance) %>% 
+  step_normalize(all_predictors(), -all_nominal()) %>% 
+  step_novel(all_nominal(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes()) -> knn_recipe_B
+#Specification
+ nearest_neighbor(neighbors = tune()) %>%
+  set_engine("kknn") %>%
+  set_mode("regression") -> knn_spec_B
+ 
+ # Workflow
+  workflow() %>% 
+  add_recipe(knn_recipe) %>% 
+  add_model(knn_spec) -> knn_workflow_B
+  
+  # Create grid of hyperparameter values
+knn_grid_B <- expand.grid(neighbors = seq(1, 100, by = 4))
+
+knn_tune_B <-
+  tune_race_anova(knn_workflow_B,
+                  resamples = FOLDS_B,
+                  grid = knn_grid_B,
+                  )
+
+show_best(knn_tune_B, metric = "rmse")
+show_best(knn_tune_B, metric = "rsq")
+autoplot(knn_tune_B)
+ 
+ 
+```
+
+```{r}
+#Select the hyperparameters  of the one who has the  minimum rmse 
+final_knn_B <- knn_workflow_B %>%
+  finalize_workflow(select_best(knn_tune, metric = "rmse"))
+
+fit_knn_B <- last_fit(final_knn_B, SPLIT)
+fit_knn_B
+collect_metrics(fit_knn_B)
+
+collect_predictions(fit_knn_B) %>%
+  ggplot(aes(Attendance, .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
+
+# VIP 
+imp_spec_knn_B <- knn_spec_B %>%
+  finalize_model(select_best(knn_tune_B, metric = "rmse")) %>%
+  set_engine("kknn", importance = "permutation")
+
+
+
+```
+
+
+
+
+
+## **Part6: Conclusion**
+
+According to the introduction, predicting the attendance of an SPL game have many perks. For that purpose,four algorithms  which are KNN, Random Forest, XGBoost, and GLMNET have been tuned and used to build models with both cv fold and bootstrapping. Unfortunately, all of them gave smaller loss function "rsme" in the training set than in the testing set. the Best one was the KNN model with cv folds with  0.887 in the training set & 0.846 in the testing test.
+The main reason for this is the penalty of having a small dataset.
+
+## **Part7: Limitations & Problems**
+
+- Small Dataset
+- Not well-rounded features considered
+
+
+
+## **Part8: Future Development**
+
+There are some opportunities to enhance the models via:
+
+- Adding more matches to solve the problem of having small dataset
+- Adding Price Tickets as a feature
+- Updating Twitter Followers after each transfer window
+- Adding the Distance between the venue and the downtown as a feature
+- Adding the total points after each round as a feature
+
+

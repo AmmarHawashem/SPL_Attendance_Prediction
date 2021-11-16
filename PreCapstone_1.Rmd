@@ -1,0 +1,2397 @@
+---
+title: "Capstone"
+author: "Ammar Al-Hawashem"
+date: "11/1/2021"
+output: html_document
+---
+ 
+# File 2
+# Description
+This file includes mainly:
+- Longitude of the venues
+- Latitude of the venues
+- Capacity of the venues
+- Twitter followers for both the Home & Away Team
+- Weekend feature
+- The rank feature
+- some revision
+   
+The resources for the rank (position) feature:
+https://www.transfermarkt.com/saudi-professional-league/spieltagtabelle/wettbewerb/SA1/saison_id/2017/spieltag/2
+https://web.archive.org/web/20160721071334/http:/www.slstat.com/spl2013-2014ar/alltable.php
+
+#Load the required libraries
+```{r}
+#install.packages("broom")
+#install.packages("stringr")
+library(tidyverse)
+library(rvest)
+library(chron)
+library(lubridate)
+library(stringr)
+
+```
+
+#Import the dataset
+```{r}
+read.csv("SPL.csv") -> SPL
+```
+
+quick look into the dataset
+```{r}
+skimr::skim(SPL)
+```
+#Adjustment 
+# Adj Teams
+Since the data was collected from multiple resources, there is a great chance of mismatching in the names of teams and venues.
+```{r}
+unique(SPL$Home) 
+```
+remove the index to make them uniform
+```{r}
+str_replace_all(SPL$Home, "Al-Ittihad FC", "Al-Ittihad") -> SPL$Home
+str_replace_all(SPL$Home, "Al Ahli SC", "Al Ahli") -> SPL$Home
+str_replace_all(SPL$Home, "Al-Qadisiyahh", "Al-Qadisiyah") -> SPL$Home
+
+#Then: replace the white space by "-"
+str_replace_all(SPL$Home, " ", "-") -> SPL$Home
+
+#The same steps with "Away"
+str_replace_all(SPL$Away, "Al-Ittihad FC", "Al-Ittihad") -> SPL$Away
+str_replace_all(SPL$Away, "Al Ahli SC", "Al Ahli") -> SPL$Away
+str_replace_all(SPL$Away, "Al-Qadisiyahh", "Al-Qadisiyah") -> SPL$Away 
+
+#Then: replace the white space by "-"
+str_replace_all(SPL$Away, " ", "-") -> SPL$Away
+
+
+```
+# Adj Venues
+Similarly, let's do if for the venues:
+```{r}
+unique(SPL$Venue) 
+```
+Adjust the irregularities from the multiple resources
+```{r}
+str_replace_all(SPL$Venue, "Prince Abdullah bin Jalawi Reserve Stadi...", "Prince Abdullah Bin Jalawi Sport City Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Prince Abdullah bin Jalawi Stadium", "Prince Abdullah Bin Jalawi Sport City Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "AlAkhdoud Club Stadium", "Al-Ukhdood Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "King Fahd International Stadium", "King Fahad International Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Prince Abdullah al-Faisal Stadium", "Prince Abdullah Al-Faisal Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "King Abdul Aziz Stadium", "King Abdul Aziz Sport City Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Prince Faisal bin Fahad Stadium", "Prince Faysal Bin Fahad stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Prince Faisal bin Fahd Stadium", "Prince Faysal Bin Fahad stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Prince Faisal bin Fahd Fahd Training Pit...", "Prince Faysal Bin Fahad stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Leadership Development Institute Stadium", "Prince Faysal Bin Fahad stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Prince Saud bin Jalawi Stadium", "Prince Saud Bin Jalawi Sport City Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Ernst-Happel-Stadion", "Prince Saud Bin Jalawi Sport City Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Al-Qadasiya Club Stadium", "Prince Saud Bin Jalawi Sport City Stadium")  -> SPL$Venue
+SPL$Venue[822] = "Prince Mohamed bin Fahd Stadium"
+
+str_replace_all(SPL$Venue, "Al Majma'ah Sport City", "King Salman Bin Abdul Aziz Sport City Stadium")  -> SPL$Venue
+
+
+str_replace_all(SPL$Venue, "Ar-Rass Stadium", "Al-Hazm Club Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Alhazm Club Stadium", "Al-Hazm Club Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Alansar Club Stadium", "Al-Ansar Club Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Al-Batin FC Stadium", "Al-Batin Club Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "Department of Education Stadium", "Al-Batin Club Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "King Abdullah Sports City", "King Abdullah International Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "King Abdullah Sports City Reserve Stadiu...", "King Abdullah International Stadium")  -> SPL$Venue
+str_replace_all(SPL$Venue, "King Abdullah International Stadium Reserve Stadiu...", "King Abdullah International Stadium")  -> SPL$Venue
+
+
+str_replace_all(SPL$Venue, "Reserve Stadium in King Abdullah Sports ...", "King Abdullah International Reserve Stadium")  -> SPL$Venue
+
+str_replace_all(SPL$Venue, "Prince Nayef bin Abdul Aziz Sports City ...", "Prince Mohamed bin Fahd Stadium")  -> SPL$Venue
+SPL$Venue[953] = "Prince Saud Bin Jalawi Sport City Stadium"
+SPL$Venue[986] = "Prince Saud Bin Jalawi Sport City Stadium"
+SPL$Venue[871] = "Prince Saud Bin Jalawi Sport City Stadium"
+SPL$Venue[844] = "Prince Mohamed bin Fahd Stadium"
+SPL$Venue[769] = "Prince Mohamed bin Fahd Stadium"
+
+str_replace_all(SPL$Venue, "Prince Abdullah Bin Jalawi Sport City Stadium\n", "Prince Abdullah Bin Jalawi Sport City Stadium")  -> SPL$Venue
+
+SPL$Venue[731] = "King Abdullah International Stadium"
+
+```
+# King Abdullah Issue
+
+```{r}
+unique(SPL$Venue) 
+```
+
+There is a problem that there is two sport cities named after King Abudllah, and there are two teams at least play in each venue which made a huge confusion in the data
+
+```{r}
+SPL -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="Prince Abdullah bin Abdul Aziz Stadium" & Home == "Al-Taawoun") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="Prince Abdullah bin Abdul Aziz Stadium" & Home == "Al-Raed") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="Prince Abdullah bin Abdul Aziz Stadium" & Home == "Al-Hazem") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="Prince Abdullah bin Abdul Aziz Stadium" & Home == "Al-Ahli") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="King Abdullah International Stadium" & Home == "Al-Taawoun") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+try %>%
+  mutate(Venue = case_when(
+    (Venue=="King Abdullah International Stadium" & Home == "Al-Raed") ~ "King Abdullah Sport City Stadium",
+     TRUE ~ as.character(Venue) )) -> try
+
+
+#Since everything is fine, we can return to our dataset (SPL) and remove this (try)
+try -> SPL
+remove(try)
+
+# NOTE: game #700 played without attendance due to a regulation from the Disciplinary Committee
+```
+# Edit Week
+Edit the column "week" which was "Weak" by mistake
+```{r}
+names(SPL)[names(SPL) == "Weak"] <- "Week"
+```
+# Add Long, Lat, Cap, followers
+Let's now add the longitude, Latitude, & capacity for the 22 venues we have:
+
+```{r}
+SPL -> try
+# Longitude
+try %>% 
+  mutate( Longitude = case_when(
+  Venue ==  "Prince Abdullah Bin Jalawi Sport City Stadium" ~ 49.612778,
+Venue =="Al-Ukhdood Stadium"~ 44.244720,
+Venue =="King Fahad International Stadium"~ 46.839236,
+Venue =="Prince Abdullah Al-Faisal Stadium"~ 39.251693,
+Venue =="King Abdul Aziz Sport City Stadium"~ 39.974081,
+Venue =="Prince Mohamed bin Fahd Stadium"~ 50.1141,
+Venue =="Prince Faysal Bin Fahad stadium"~ 46.739745,
+Venue =="King Abdullah Sport City Stadium"~ 43.9478,
+Venue =="Prince Saud Bin Jalawi Sport City Stadium"~ 50.2052,
+Venue =="King Salman Bin Abdul Aziz Sport City Stadium"~ 45.368019,
+Venue =="Al-Hazm Club Stadium"~ 43.502350,
+Venue =="Prince Mohammed bin Abdul Aziz Stadium"~ 42.490070,
+Venue =="Al-Ansar Club Stadium"~ 39.545272,
+Venue =="Al-Shoalah Club Stadium"~ 47.3473497,
+Venue =="Al Orubah Club Stadium"~ 40.2110362,
+Venue =="Prince Mohammed Alabdullah Stadium"~ 39.2188755,
+Venue =="King Abdullah International Stadium"~ 39.164170,
+Venue =="King Abdullah International Reserve Stadium"~ 39.164170,
+Venue =="Al-Batin Club Stadium"~ 46.075254,
+Venue =="King Saud University Stadium"~ 46.626176,
+Venue =="Prince Khalid bin Sultan Stadium"~ 46.627541,
+Venue =="Prince Sultan bin Abdul Aziz Stadium" ~ 42.597384
+)  ) -> try
+
+#Latitude
+try %>% 
+  mutate( Latitude = case_when(
+  Venue ==  "Prince Abdullah Bin Jalawi Sport City Stadium" ~ 25.305833,
+Venue =="Al-Ukhdood Stadium"~ 17.590280,
+Venue =="King Fahad International Stadium"~ 24.788206,
+Venue =="Prince Abdullah Al-Faisal Stadium"~21.446608,
+Venue =="King Abdul Aziz Sport City Stadium"~ 21.485366,
+Venue =="Prince Mohamed bin Fahd Stadium"~ 26.4272,
+Venue =="Prince Faysal Bin Fahad stadium"~ 24.662599,
+Venue =="King Abdullah Sport City Stadium"~ 26.3789,
+Venue =="Prince Saud Bin Jalawi Sport City Stadium"~ 26.3699,
+Venue =="King Salman Bin Abdul Aziz Sport City Stadium"~ 25.886929,
+Venue =="Al-Hazm Club Stadium"~ 25.862347,
+Venue =="Prince Mohammed bin Abdul Aziz Stadium"~ 18.223043,
+Venue =="Al-Ansar Club Stadium"~ 24.514177,
+Venue =="Al-Shoalah Club Stadium"~ 24.165976,
+Venue =="Al Orubah Club Stadium"~ 30.005241,
+Venue =="Prince Mohammed Alabdullah Stadium"~ 21.563392,
+Venue =="King Abdullah International Stadium"~ 21.763220,
+Venue =="King Abdullah International Reserve Stadium"~ 21.763220,
+Venue =="Al-Batin Club Stadium"~ 28.448749,
+Venue =="King Saud University Stadium"~ 24.730150,
+Venue =="Prince Khalid bin Sultan Stadium"~ 24.804023,
+Venue =="Prince Sultan bin Abdul Aziz Stadium" ~ 18.311279
+)  ) -> try
+
+
+#Capacity
+try %>% 
+  mutate( Capacity = case_when(
+  Venue ==  "Prince Abdullah Bin Jalawi Sport City Stadium" ~ 27550,
+Venue =="Al-Ukhdood Stadium"~ 2800,
+Venue =="King Fahad International Stadium"~ 67000,
+Venue =="Prince Abdullah Al-Faisal Stadium"~18000,
+Venue =="King Abdul Aziz Sport City Stadium"~ 38000,
+Venue =="Prince Mohamed bin Fahd Stadium"~ 26000,
+Venue =="Prince Faysal Bin Fahad stadium"~ 22500,
+Venue =="King Abdullah Sport City Stadium"~ 25000,
+Venue =="Prince Saud Bin Jalawi Sport City Stadium"~ 21100,
+Venue =="King Salman Bin Abdul Aziz Sport City Stadium"~ 7000,
+Venue =="Al-Hazm Club Stadium"~ 3000,
+Venue =="Prince Mohammed bin Abdul Aziz Stadium"~20000 ,
+Venue =="Al-Ansar Club Stadium"~ 5000,
+Venue =="Al-Shoalah Club Stadium"~ 6000,
+Venue =="Al Orubah Club Stadium"~ 7000,
+Venue =="Prince Mohammed Alabdullah Stadium"~21000 ,
+Venue =="King Abdullah International Stadium"~ 60000,
+Venue =="King Abdullah International Reserve Stadium"~ 500,
+Venue =="Al-Batin Club Stadium"~ 6000,
+Venue =="King Saud University Stadium"~ 25000,
+Venue =="Prince Khalid bin Sultan Stadium"~ 10000,
+Venue =="Prince Sultan bin Abdul Aziz Stadium" ~ 20000
+)  ) -> try
+
+
+#Twitter followers assuming it's constant during all the seasons
+try %>% 
+  mutate( H_Followers = case_when(
+    Home == "Al-Fateh"  ~ 161.1*10^3,
+    Home ==  "Najran"     ~ 31.2*10^3 ,
+    Home == "Al-Shabab" ~ 414.9*10^3 ,
+    Home ==   "Al-Ittihad" ~ 4*10^6,
+  Home =="Al-Hilal" ~ 9.6*10^6 ,
+  Home ==    "Al-Wehda" ~ 226.6*10^3 ,
+  Home ==  "Al-Ahli"   ~2*10^6 ,
+ Home == "Al-Ettifaq" ~ 226.5*10^3,
+  Home ==  "Al-Nassr"  ~ 3.1*10^6,
+  Home =="Al-Taawon" ~ 208.7*10^3,
+  Home =="Al-Qadisiya" ~ 91.7*10^3,
+   Home =="Al-Faisaly" ~ 103.9*10^3,
+  Home == "Al-Raed" ~149.2*10^3 ,
+  Home =="Al-Hazem"  ~ 49.7*10^3,
+  Home =="Hajer"    ~ 21.9*10^3,
+   Home =="Al-Ansar" ~ 17.3*10^3,
+  Home ==  "Al-Shoalah" ~20.6*10^3 ,
+  Home == "Al-Nahda"   ~ 13.1*10^3,
+  Home =="Al-Orubah"   ~ 28*10^3 ,
+   Home =="Al-Shoulla"~ 20.6*10^3,
+  Home ==  "Al-Orobah" ~28*10^3 ,
+  Home == "Al-Khaleej" ~ 78.1*10^3,
+  Home =="Al-Taawoun" ~ 208.7*10^3,
+   Home =="Al-Qadsiah"~ 91.7*10^3,
+  Home == "Al-Batin" ~ 98.2*10^3,
+  Home =="Al-Fayha" ~ 70.8*10^3 ,
+ Home == "Ohod" ~79.7*10^3 ,
+ Home == "Al-Adalah" ~ 25.4*10^3,
+ Home == "Damac" ~ 72.4*10^3,
+ Home ==  "Abha" ~ 56.8*10^3
+  )) ->try
+#Simillarly for  Away teams
+try %>% 
+  mutate( A_Followers = case_when(
+    Away == "Al-Fateh" ~ 161.1*10^3,
+    Away ==  "Najran"     ~ 31.2*10^3 ,
+    Away == "Al-Shabab" ~ 414.9*10^3 ,
+    Away ==   "Al-Ittihad" ~ 4*10^6,
+  Away =="Al-Hilal" ~ 9.6*10^6 ,
+  Away ==    "Al-Wehda" ~ 226.6*10^3 ,
+  Away ==  "Al-Ahli"   ~2*10^6 ,
+ Away == "Al-Ettifaq" ~ 226.5*10^3,
+  Away ==  "Al-Nassr"  ~ 3.1*10^6,
+  Away =="Al-Taawon" ~ 208.7*10^3,
+  Away =="Al-Qadisiya" ~ 91.7*10^3,
+   Away =="Al-Faisaly" ~ 103.9*10^3,
+  Away == "Al-Raed" ~149.2*10^3 ,
+  Away =="Al-Hazem"  ~ 49.7*10^3,
+  Away =="Hajer"    ~ 21.9*10^3,
+   Away =="Al-Ansar" ~ 17.3*10^3,
+  Away ==  "Al-Shoalah" ~20.6*10^3 ,
+  Away == "Al-Nahda"   ~ 13.1*10^3,
+  Away =="Al-Orubah"   ~ 28*10^3 ,
+   Away =="Al-Shoulla"~ 20.6*10^3,
+  Away ==  "Al-Orobah" ~28*10^3 ,
+  Away == "Al-Khaleej" ~ 78.1*10^3,
+  Away =="Al-Taawoun" ~ 208.7*10^3,
+   Away =="Al-Qadsiah"~ 91.7*10^3,
+  Away == "Al-Batin" ~ 98.2*10^3,
+  Away =="Al-Fayha" ~ 70.8*10^3 ,
+ Away == "Ohod" ~79.7*10^3 ,
+ Away == "Al-Adalah" ~ 25.4*10^3,
+ Away == "Damac" ~ 72.4*10^3,
+ Away ==  "Abha" ~ 56.8*10^3
+  )) ->try
+```
+#adj teams #2
+```{r}
+#You may notice that even after revision, there are four teams has two names, so let's uniform them:
+str_replace_all(try$Home, "Al-Shoalah", "Al-Shoulla") -> try$Home
+str_replace_all(try$Home, "Al-Shoulla", "Al-Shoulla") -> try$Home
+str_replace_all(try$Home, "Al-Orubah", "Al-Orobah") -> try$Home
+str_replace_all(try$Home, "Al-Taawon", "Al-Taawoun") -> try$Home
+str_replace_all(try$Home, "Al-Qadisiya", "Al-Qadisiyah") -> try$Home
+str_replace_all(try$Home, "Al-Qadsiah", "Al-Qadisiyah") -> try$Home
+#AWay
+str_replace_all(try$Away, "Al-Shoalah", "Al-Shoulla") -> try$Away
+str_replace_all(try$Away, "Al-Shoulla", "Al-Shoulla") -> try$Away
+str_replace_all(try$Away, "Al-Orubah", "Al-Orobah") -> try$Away
+str_replace_all(try$Away, "Al-Taawon", "Al-Taawoun") -> try$Away
+str_replace_all(try$Away, "Al-Qadisiya", "Al-Qadisiyah") -> try$Away
+str_replace_all(try$Away, "Al-Qadsiah", "Al-Qadisiyah") -> try$Away
+```
+
+
+Check 
+```{r}
+skimr::skim(
+try  
+)
+#let's return our SPL and delete the try version
+try -> SPL
+remove(try)
+```
+
+#Add families feature
+The women has been allowed to be present since 2018-01-12 
+```{r}
+SPL -> try
+
+try %>% 
+  mutate(Families = case_when(
+    Date >="2018-01-12" ~ "Yes",
+    TRUE ~ "No"
+  )) -> try
+```
+# Add period feature
+Let's divide the matches according to the time: to daytime & night 
+```{r}
+try %>% 
+  mutate(Period = case_when(
+    Time >="17:00:00" ~ "Night",
+    TRUE ~ "Daytime"
+  )) -> try
+```
+
+Let's divide the matches further according is it weekend (including Thursday's) or weekday. In addition, I'll consider the public holidays in Saudi Arabia as weekends (Eid Al-Adha & Saudi National Day).
+
+# Add Weekend feature
+which includes holidays
+```{r}
+# The dates for the holidays
+try %>% 
+  mutate(Weekend = case_when(
+    Day =="Saturday" |
+      Day =="Thursday" |
+      Day =="Friday" |
+      (Date >= "2010-11-12" & Date <= "2010-11-22") |
+      (Date >= "2011-11-02" & Date <= "2011-11-12") |
+      (Date >= "2012-10-21" & Date <= "2012-10-31") |
+      (Date >= "2013-10-10" & Date <= "2013-10-20") |
+      (Date >= "2014-09-26" & Date <= "2014-10-08") |
+      (Date >= "2015-09-24" & Date <= "2015-10-02") |
+      (Date >= "2016-09-10" & Date <= "2016-09-15") |
+      (Date >= "2017-09-02" & Date <= "2017-09-05") |
+      (Date >= "2018-08-20" & Date <= "2018-08-23") |
+      (Date >= "2019-08-10" & Date <= "2019-08-13") |
+      Date == "2010-09-23" |
+      Date == "2011-09-23" |
+      Date == "2012-09-23" |
+      Date == "2013-09-23" |
+      Date == "2014-09-23" |
+      Date == "2015-09-23" |
+      Date == "2016-09-23" |
+      Date == "2017-09-23" |
+      Date == "2018-09-23" |
+      Date == "2019-09-23" 
+      ~ "Yes",
+    TRUE ~ "No"
+  )) -> try
+```
+
+```{r}
+try -> SPL
+remove(try)
+```
+
+```{r}
+#Adjustment
+str_replace_all(SPL$Home, "Al-Qadisiyahh", "Al-Qadisiyah") -> SPL$Home
+str_replace_all(SPL$Away, "Al-Qadisiyahh", "Al-Qadisiyah") -> SPL$Away
+
+SPL %>% 
+  mutate(Index = c(1:1861)) -> SPL
+SPL <- SPL[,c(19,1:18)]
+
+# workflow has been saved (CapstoneV1)
+
+```
+#Add position Feature
+Let's add position Home & Position Away which represent the standing of each team before the fixture
+```{r}
+SPL %>% 
+add_column(PosH = 0,PosA = 0) -> SPL
+```
+# Split the seasons
+Let's Separate the seasons to fill the standing
+Note: we cannot use loop since some seasons have more teams
+```{r}
+s10 <- SPL[1:182,]
+s11 <- SPL[183:364,]
+s12  <- SPL[365:546,]
+s13  <- SPL[547:728,]
+s14  <- SPL[729:910,]
+s15  <- SPL[911:1092,]
+s16  <- SPL[1093:1274,]
+s17  <- SPL[1275:1456,]
+s18  <- SPL[1457:1696,]
+s19  <- SPL[1697:1861,]
+```
+
+The resources for the position/per round:
+
+https://www.transfermarkt.com/saudi-professional-league/spieltagtabelle/wettbewerb/SA1/saison_id/2017/spieltag/2
+https://web.archive.org/web/20160721071334/http:/www.slstat.com/spl2013-2014ar/alltable.php
+
+```{r}
+#Season2010
+Qadisiyah<- c(1,1,5,5,4,6,6,7,7,10,10,11,9,10,12,12,10,11,10,11,12,12,13,12,12,13)
+Raed<- c(1,2,2,3,3,3,5,5,6,6,8,8,7,7,7,7,7,8,8,8,7,8,10,10,10,9)
+Ittihad<- c(1,3,3,2,2,2,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2)
+Ahli<- c(1,4,8,8,10,11,12,13,11,12,12,12,12,12,9,8,8,7,7,7,8,7,7,8,8,7)
+Hilal<- c(1,5,4,1,1,1,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)
+Nassr<- c(1,6,1,4,5,4,3,4,4,3,4,3,3,4,3,3,3,4,3,4,3,3,3,3,5,4)
+Faisaly<- c(1,7,10,13,13,13,10,11,9,7,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6)
+Wehda<- c(1,8,9,11,12,10,13,9,8,9,7,7,8,8,8,9,9,10,9,9,11,11,11,11,11,12)
+Ettifaq<- c(1,9,7,7,6,5,4,3,5,4,3,5,4,3,4,5,4,5,5,3,4,5,5,4,3,3)
+Hazem<- c(1,10,12,12,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14)
+Taawoun<- c(1,11,6,6,7,7,8,8,10,8,9,9,10,9,11,11,12,12,12,10,9,9,8,7,7,8)
+Najran<- c(1,12,11,14,11,12,9,10,12,11,11,10,11,11,13,13,13,13,13,13,13,13,12,13,13,11)
+Fateh<- c(1,13,13,9,8,9,11,12,13,13,13,13,13,13,10,10,11,9,11,12,10,10,9,9,9,10)
+Shabab<- c(1,14,14,10,9,8,7,6,3,5,5,4,5,5,5,4,5,3,4,5,5,4,4,5,4,5)
+
+#The difficulties with the loop:
+  # 1- There are some postponed matches which made relying in the round (week) is not feasbile
+  # 2- Not all the seaosns have the same number of matches
+  # 3- The two teams (Home & Away are in the same row)
+
+# The logic of the loop:
+  #   i is the the number of the game (row)
+  #   j is the index of the rank 
+  # One loop for each team/season
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Najran") {
+    s10$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Najran") {
+      s10$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+  
+##2
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Qadisiyah") {
+    s10$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Qadisiyah") {
+      s10$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Raed") {
+    s10$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Raed") {
+      s10$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Ittihad") {
+    s10$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Ittihad") {
+      s10$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Ahli") {
+    s10$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Ahli") {
+      s10$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Hilal") {
+    s10$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Hilal") {
+      s10$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Nassr") {
+    s10$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Nassr") {
+      s10$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Taawoun") {
+    s10$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Taawoun") {
+      s10$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Faisaly") {
+    s10$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Faisaly") {
+      s10$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Hazem") {
+    s10$PosH[i] <- Hazem[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Hazem") {
+      s10$PosA[i] <- Hazem[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Wehda") {
+    s10$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Wehda") {
+      s10$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Ettifaq") {
+    s10$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Ettifaq") {
+      s10$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Fateh") {
+    s10$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Fateh") {
+      s10$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s10$Home[i] == "Al-Shabab") {
+    s10$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s10$Away[i] == "Al-Shabab") {
+      s10$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+# #Season2011
+Ittihad<- c(1,1,6,9,6,7,6,6,5,5,5,6,5,5,5,6,6,6,6,6,7,6,6,6,6,6)
+Shabab<- c(1,2,1,2,1,2,1,1,1,2,1,1,1,1,2,3,2,2,2,1,1,1,1,1,1,1)
+Hilal<- c(1,3,9,4,3,3,3,3,3,3,2,2,2,2,1,1,3,4,3,3,3,3,3,3,3,3)
+Ahli<- c(1,4,3,1,4,4,4,4,4,4,4,3,3,3,3,2,1,1,1,2,2,2,2,2,2,2)
+Ettifaq<- c(1,5,2,3,2,1,2,2,2,1,3,4,4,4,4,4,4,3,4,4,4,4,4,4,4,4)
+Nassr<- c(1,6,10,7,11,8,8,5,7,6,7,5,6,7,7,7,7,7,7,7,6,7,7,7,7,7)
+Fateh<- c(1,7,4,5,5,5,5,7,6,7,6,7,7,6,6,5,5,5,5,5,5,5,5,5,5,5)
+Najran<- c(1,8,11,13,12,10,12,12,9,9,9,9,10,8,8,8,10,11,9,10,8,8,8,8,8,9)
+Hajer<- c(1,9,12,10,9,12,11,9,11,11,12,12,8,11,13,11,8,9,10,9,10,10,11,11,11,11)
+Ansar<- c(1,10,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14)
+Qadisiyah<- c(1,11,5,8,8,6,7,8,10,10,10,10,11,9,9,9,11,10,11,11,12,12,13,13,13,13)
+Raed<- c(1,12,13,12,13,13,13,13,13,13,13,11,12,10,11,12,13,13,13,12,11,11,9,10,9,10)
+Taawoun<- c(1,13,8,11,10,11,9,10,12,12,11,13,13,13,12,13,12,12,12,13,13,13,12,12,12,12)
+Faisaly<- c(1,14,7,6,7,9,10,11,8,8,8,8,9,12,10,10,9,8,8,8,9,9,10,9,10,8)
+
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Najran") {
+    s11$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Najran") {
+      s11$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Qadisiyah") {
+    s11$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Qadisiyah") {
+      s11$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Raed") {
+    s11$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Raed") {
+      s11$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Ittihad") {
+    s11$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Ittihad") {
+      s11$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Ahli") {
+    s11$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Ahli") {
+      s11$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Hilal") {
+    s11$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Hilal") {
+      s11$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Nassr") {
+    s11$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Nassr") {
+      s11$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Taawoun") {
+    s11$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Taawoun") {
+      s11$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Faisaly") {
+    s11$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Faisaly") {
+      s11$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Hajer") {
+    s11$PosH[i] <- Hajer[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Hajer") {
+      s11$PosA[i] <- Hajer[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Ansar") {
+    s11$PosH[i] <- Ansar[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Ansar") {
+      s11$PosA[i] <- Ansar[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Ettifaq") {
+    s11$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Ettifaq") {
+      s11$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Fateh") {
+    s11$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Fateh") {
+      s11$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s11$Home[i] == "Al-Shabab") {
+    s11$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s11$Away[i] == "Al-Shabab") {
+      s11$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+#Season2012
+Ahli<- c(1,1,6,7,8,5,4,3,5,6,5,7,6,6,6,6,5,5,5,5,5,5,4,5,5,5)
+Shabab<- c(1,2,1,1,1,3,2,5,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3)
+Taawoun<- c(1,3,2,4,6,10,11,11,12,11,11,10,10,10,11,11,10,11,11,11,11,12,12,12,12,12)
+Hilal<- c(1,4,9,6,7,4,3,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,2,2,2)
+Ittihad<- c(1,5,4,2,3,2,5,4,6,5,6,8,8,7,7,7,7,7,7,7,7,7,7,7,7,7)
+Raed<- c(1,6,12,10,10,7,8,7,8,9,9,9,9,9,9,9,9,9,9,9,8,9,9,8,8,8)
+Hajer<- c(1,7,8,5,5,9,9,10,11,12,12,12,13,13,13,13,11,13,13,13,13,13,13,13,13,13)
+Ettifaq<- c(1,8,11,9,9,12,10,12,9,8,7,5,4,5,5,5,6,6,6,6,6,6,6,6,6,6)
+Fateh<- c(1,9,5,3,2,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1)
+Nassr<- c(1,10,3,8,4,6,6,6,3,4,4,4,5,4,4,4,4,4,4,4,4,4,5,4,4,4)
+Wehda<- c(1,11,10,12,14,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14)
+Faisaly<- c(1,12,14,14,13,14,13,13,13,13,13,13,12,12,10,12,12,12,12,12,12,11,11,11,11,11)
+Najran<- c(1,13,13,13,13,8,7,8,7,7,8,6,7,8,8,8,8,8,8,8,9,8,8,9,9,10)
+Shoulla<- c(1,14,7,11,12,11,12,9,10,10,10,11,11,11,12,10,13,10,10,10,10,10,10,10,10,9)
+
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Najran") {
+    s12$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Najran") {
+      s12$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Wehda") {
+    s12$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Wehda") {
+      s12$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Raed") {
+    s12$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Raed") {
+      s12$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Ittihad") {
+    s12$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Ittihad") {
+      s12$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Ahli") {
+    s12$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Ahli") {
+      s12$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Hilal") {
+    s12$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Hilal") {
+      s12$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Nassr") {
+    s12$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Nassr") {
+      s12$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Taawoun") {
+    s12$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Taawoun") {
+      s12$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Faisaly") {
+    s12$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Faisaly") {
+      s12$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Hajer") {
+    s12$PosH[i] <- Hajer[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Hajer") {
+      s12$PosA[i] <- Hajer[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Shoulla") {
+    s12$PosH[i] <- Shoulla[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Shoulla") {
+      s12$PosA[i] <- Shoulla[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Ettifaq") {
+    s12$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Ettifaq") {
+      s12$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Fateh") {
+    s12$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Fateh") {
+      s12$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s12$Home[i] == "Al-Shabab") {
+    s12$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s12$Away[i] == "Al-Shabab") {
+      s12$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+#Season2013
+Ittihad<- c(1,1,5,3,6,4,6,6,7,7,6,7,8,7,7,6,6,6,6,7,7,6,6,6,6,6)
+Hilal<- c(1,2,1,1,1,1,2,2,2,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2)
+Ahli<- c(1,3,2,5,3,3,5,4,4,3,4,6,4,4,5,5,5,4,5,3,3,3,3,3,3,3)
+Nassr<- c(1,4,3,2,2,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)
+Raed<- c(1,5,8,10,12,11,9,10,9,8,9,10,11,11,9,7,7,9,10,11,10,11,13,13,10,8)
+Nahda<- c(1,6,12,13,14,13,13,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14)
+Shoulla<- c(1,7,11,12,13,14,14,14,13,13,13,13,13,13,13,13,11,8,9,6,6,8,11,10,11,12)
+Fateh<- c(1,8,4,7,8,7,7,7,8,9,8,9,9,9,10,10,9,7,8,10,11,7,7,7,7,9)
+Taawoun<- c(1,9,10,6,5,8,8,8,6,6,5,4,5,6,4,4,3,3,3,5,5,5,5,5,5,5)
+Ettifaq<- c(1,10,14,11,10,12,12,11,10,10,11,8,7,5,6,8,8,10,7,9,9,10,12,9,12,10)
+Faisaly<- c(1,11,13,14,9,9,11,9,11,11,10,11,12,12,12,12,13,13,13,13,12,12,8,11,8,7)
+Najran<- c(1,12,6,9,7,5,3,5,3,5,7,5,6,8,8,9,10,11,11,8,8,9,9,8,9,13)
+Shabab<- c(1,13,9,4,4,6,4,3,5,4,3,3,3,3,3,3,4,5,4,4,4,4,4,4,4,4)
+Orobah<- c(1,14,7,8,11,10,10,12,12,12,12,12,10,10,11,11,12,12,12,12,13,13,10,12,13,11)
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Najran") {
+    s13$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Najran") {
+      s13$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Nahda") {
+    s13$PosH[i] <- Nahda[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Nahda") {
+      s13$PosA[i] <- Nahda[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Raed") {
+    s13$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Raed") {
+      s13$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Ittihad") {
+    s13$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Ittihad") {
+      s13$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Ahli") {
+    s13$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Ahli") {
+      s13$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Hilal") {
+    s13$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Hilal") {
+      s13$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Nassr") {
+    s13$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Nassr") {
+      s13$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Taawoun") {
+    s13$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Taawoun") {
+      s13$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Faisaly") {
+    s13$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Faisaly") {
+      s13$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Orobah") {
+    s13$PosH[i] <- Orobah[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Orobah") {
+      s13$PosA[i] <- Orobah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Shoulla") {
+    s13$PosH[i] <- Shoulla[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Shoulla") {
+      s13$PosA[i] <- Shoulla[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Ettifaq") {
+    s13$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Ettifaq") {
+      s13$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Fateh") {
+    s13$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Fateh") {
+      s13$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s13$Home[i] == "Al-Shabab") {
+    s13$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s13$Away[i] == "Al-Shabab") {
+      s13$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+#Season2014
+Ahli<- c(1,1,5,7,6,6,5,5,5,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2)
+Nassr<- c(1,2,2,2,1,1,1,3,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)
+Hilal<- c(1,3,1,4,4,3,3,4,4,5,5,4,4,4,3,4,5,5,4,4,4,3,3,3,3,3)
+Shabab<- c(1,4,3,1,2,4,4,2,1,2,2,3,3,3,4,3,4,4,5,5,5,5,5,5,5,5)
+Orobah<- c(1,5,7,6,7,7,7,8,8,9,9,11,12,11,12,12,13,13,13,13,13,13,14,13,13,14)
+Faisaly<- c(1,6,6,5,5,5,6,6,6,6,6,6,6,6,6,7,7,7,6,6,6,6,6,6,6,6)
+Ittihad<- c(1,7,4,3,3,2,2,1,3,4,4,5,5,5,5,5,3,3,3,3,3,4,4,4,4,4)
+Taawoun<- c(1,8,13,12,9,10,10,10,10,11,10,8,9,8,8,6,6,6,7,7,7,7,8,8,9,10)
+Fateh<- c(1,9,14,14,14,9,9,9,9,10,8,10,11,10,9,9,9,9,8,9,9,9,7,7,8,7)
+Raed<- c(1,10,12,13,13,14,12,13,14,14,14,14,14,14,13,13,10,11,9,10,11,12,10,11,11,12)
+Shoulla<- c(1,11,9,11,12,12,14,14,12,13,13,12,13,13,14,14,14,14,14,14,14,14,13,14,14,13)
+Khaleej<- c(1,12,10,10,11,13,12,12,13,12,12,13,10,12,11,11,12,10,11,12,12,11,12,10,10,8)
+Najran<- c(1,13,11,9,10,11,11,11,11,8,11,9,8,9,10,10,11,12,12,11,10,10,11,12,12,11)
+Hajer<- c(1,14,8,8,8,8,8,7,7,7,7,7,7,7,7,8,8,8,10,8,8,8,9,9,7,9)
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Najran") {
+    s14$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Najran") {
+      s14$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Khaleej") {
+    s14$PosH[i] <- Khaleej[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Khaleej") {
+      s14$PosA[i] <- Khaleej[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Raed") {
+    s14$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Raed") {
+      s14$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Ittihad") {
+    s14$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Ittihad") {
+      s14$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Ahli") {
+    s14$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Ahli") {
+      s14$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Hilal") {
+    s14$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Hilal") {
+      s14$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Nassr") {
+    s14$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Nassr") {
+      s14$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Taawoun") {
+    s14$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Taawoun") {
+      s14$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Faisaly") {
+    s14$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Faisaly") {
+      s14$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Orobah") {
+    s14$PosH[i] <- Orobah[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Orobah") {
+      s14$PosA[i] <- Orobah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Shoulla") {
+    s14$PosH[i] <- Shoulla[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Shoulla") {
+      s14$PosA[i] <- Shoulla[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Hajer") {
+    s14$PosH[i] <- Hajer[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Hajer") {
+      s14$PosA[i] <- Hajer[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Fateh") {
+    s14$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Fateh") {
+      s14$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s14$Home[i] == "Al-Shabab") {
+    s14$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s14$Away[i] == "Al-Shabab") {
+      s14$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+
+#Season2015
+Shabab<- c(1,1,1,4,3,4,4,5,5,5,6,8,9,6,5,5,5,5,5,5,5,5,5,6,6,6)
+Fateh<- c(1,2,7,7,6,8,9,7,6,7,5,5,5,5,7,7,7,6,8,9,7,6,6,5,5,5)
+Hilal<- c(1,3,2,1,1,3,1,1,1,1,1,2,2,2,1,1,1,1,1,2,2,2,2,2,2,2)
+Ittihad<- c(1,4,3,5,4,2,3,3,3,4,3,3,4,3,3,3,3,3,3,3,3,3,3,3,3,3)
+Qadisiyah<- c(1,5,6,8,8,9,11,11,11,11,12,12,11,11,11,11,11,11,13,12,13,13,11,12,12,11)
+Ahli<- c(1,6,4,2,2,1,2,2,2,2,2,1,1,1,2,2,2,2,2,1,1,1,1,1,1,1)
+Nassr<- c(1,7,8,6,7,6,6,8,8,6,8,7,6,8,6,6,6,7,7,8,9,8,8,8,8,8)
+Taawoun<- c(1,8,5,3,5,5,5,4,4,3,4,4,3,4,4,4,4,4,4,4,4,4,4,4,4,4)
+Hajer<- c(1,9,11,10,11,11,12,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14)
+Najran<- c(1,10,9,11,13,14,14,14,13,12,13,13,13,13,13,13,12,12,10,11,11,11,12,13,13,13)
+Faisaly<- c(1,11,12,9,10,7,7,9,9,9,9,9,8,9,9,9,9,8,6,7,8,9,9,9,9,9)
+Raed<- c(1,12,13,14,14,12,13,10,10,10,10,11,12,12,12,12,13,13,12,13,12,12,13,11,11,12)
+Khaleej<- c(1,13,14,13,9,10,8,6,7,8,7,6,7,7,8,8,8,9,9,6,6,7,7,7,7,7)
+Wehda<- c(1,14,10,12,12,13,10,12,12,13,11,10,10,10,10,10,10,10,11,10,10,10,10,10,10,10)
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Najran") {
+    s15$PosH[i] <- Najran[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Najran") {
+      s15$PosA[i] <- Najran[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Khaleej") {
+    s15$PosH[i] <- Khaleej[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Khaleej") {
+      s15$PosA[i] <- Khaleej[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Raed") {
+    s15$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Raed") {
+      s15$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Ittihad") {
+    s15$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Ittihad") {
+      s15$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Ahli") {
+    s15$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Ahli") {
+      s15$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Hilal") {
+    s15$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Hilal") {
+      s15$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Nassr") {
+    s15$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Nassr") {
+      s15$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Taawoun") {
+    s15$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Taawoun") {
+      s15$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Faisaly") {
+    s15$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Faisaly") {
+      s15$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Qadisiyah") {
+    s15$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Qadisiyah") {
+      s15$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Wehda") {
+    s15$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Wehda") {
+      s15$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Hajer") {
+    s15$PosH[i] <- Hajer[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Hajer") {
+      s15$PosA[i] <- Hajer[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Fateh") {
+    s15$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Fateh") {
+      s15$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s15$Home[i] == "Al-Shabab") {
+    s15$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s15$Away[i] == "Al-Shabab") {
+      s15$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+#Season2016
+Ahli<- c(1,1,1,3,5,3,5,5,5,3,4,4,4,3,2,2,2,2,2,4,3,3,3,4,4,3)
+Nassr<- c(1,2,8,5,6,5,3,3,3,2,3,3,3,4,4,3,4,3,3,2,2,2,2,2,3,2)
+Faisaly<- c(1,3,4,6,4,7,9,11,10,9,11,11,13,12,12,9,11,10,11,11,11,10,9,9,9,9)
+Hilal<- c(1,4,2,4,3,2,1,2,2,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1)
+Ittihad<- c(1,5,3,1,1,1,2,1,1,4,2,2,2,1,3,4,3,4,4,3,4,4,4,3,2,4)
+Wehda<- c(1,6,9,11,12,12,10,8,8,8,9,9,11,13,13,12,13,14,14,12,12,13,14,14,14,14)
+Shabab<- c(1,7,11,8,8,6,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,6,5,5,6,7)
+Qadisiyah<- c(1,8,10,12,13,13,13,13,13,12,14,12,12,10,9,10,9,11,9,9,7,8,10,10,12,11)
+Taawoun<- c(1,9,13,10,11,11,11,10,11,10,8,7,7,8,7,7,8,7,8,6,8,5,6,7,7,6)
+Raed<- c(1,10,5,9,7,9,7,6,7,7,7,8,8,7,8,8,7,9,6,7,6,7,7,6,5,5)
+Khaleej<- c(1,11,12,13,9,10,12,12,12,13,12,14,10,11,11,11,12,13,13,14,14,12,13,13,13,13)
+Batin<- c(1,12,7,7,10,8,8,9,9,11,10,10,9,9,10,13,10,9,10,10,10,11,11,12,11,12)
+Fateh<- c(1,13,14,14,14,14,14,14,14,14,13,13,14,14,14,14,14,12,12,13,13,14,12,11,10,10)
+Ettifaq<- c(1,14,6,2,2,4,6,7,6,6,6,6,6,6,6,6,6,6,7,8,9,9,8,8,8,8)
+
+
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Batin") {
+    s16$PosH[i] <- Batin[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Batin") {
+      s16$PosA[i] <- Batin[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Khaleej") {
+    s16$PosH[i] <- Khaleej[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Khaleej") {
+      s16$PosA[i] <- Khaleej[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Raed") {
+    s16$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Raed") {
+      s16$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Ittihad") {
+    s16$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Ittihad") {
+      s16$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Ahli") {
+    s16$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Ahli") {
+      s16$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Hilal") {
+    s16$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Hilal") {
+      s16$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Nassr") {
+    s16$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Nassr") {
+      s16$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Taawoun") {
+    s16$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Taawoun") {
+      s16$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Faisaly") {
+    s16$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Faisaly") {
+      s16$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Qadisiyah") {
+    s16$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Qadisiyah") {
+      s16$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Wehda") {
+    s16$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Wehda") {
+      s16$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Ettifaq") {
+    s16$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Ettifaq") {
+      s16$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Fateh") {
+    s16$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Fateh") {
+      s16$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s16$Home[i] == "Al-Shabab") {
+    s16$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s16$Away[i] == "Al-Shabab") {
+      s16$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+```
+
+workspace has been saved (CapstoneV2)
+
+```{r}
+#Season2017
+Taawoun<- c(1,1,6,9,7,10,10,7,7,9,9,7,8,7,7,9,7,8,7,5,5,5,5,6,8,5)
+Nassr<- c(1,2,3,7,5,5,5,4,3,4,3,4,3,3,3,4,3,4,3,4,3,3,4,3,3,3)
+Batin<- c(1,3,1,2,1,3,3,3,5,5,5,5,5,6,6,6,8,9,10,10,11,11,11,11,11,11)
+Hilal<- c(1,4,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)
+Qadisiyah<- c(1,5,11,5,4,7,8,9,9,7,8,9,10,8,8,10,12,12,12,12,12,13,12,12,12,12)
+Ettifaq<- c(1,6,4,11,8,12,13,13,11,10,10,10,11,13,13,12,10,11,11,11,10,10,9,9,6,9)
+Ohod<- c(1,7,10,12,11,13,12,12,14,14,12,13,12,12,12,13,13,13,13,13,13,12,13,13,14,14)
+Ahli<- c(1,8,5,3,6,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2)
+Raed<- c(1,9,12,14,14,14,14,14,13,13,14,14,14,14,14,14,14,14,14,14,14,14,14,14,13,13)
+Shabab<- c(1,10,7,6,9,9,9,10,10,11,11,11,9,10,10,7,6,5,5,8,8,9,10,10,9,10)
+Fayha<- c(1,11,13,13,13,11,11,11,12,12,13,12,13,11,11,8,9,7,6,7,6,6,6,7,7,7)
+Ittihad<- c(1,12,8,10,10,6,7,8,8,6,7,8,6,5,5,5,5,6,8,6,7,7,7,8,10,8)
+Faisaly<- c(1,13,9,4,3,4,4,5,4,3,4,3,4,4,4,3,4,3,4,3,4,4,3,4,5,6)
+Fateh<- c(1,14,14,8,12,8,6,6,6,8,6,6,7,9,9,11,11,10,9,9,9,8,8,5,4,4)
+
+
+
+##1
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Batin") {
+    s17$PosH[i] <- Batin[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Batin") {
+      s17$PosA[i] <- Batin[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Ohod") {
+    s17$PosH[i] <- Ohod[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Ohod") {
+      s17$PosA[i] <- Ohod[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Raed") {
+    s17$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Raed") {
+      s17$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Ittihad") {
+    s17$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Ittihad") {
+      s17$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Ahli") {
+    s17$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Ahli") {
+      s17$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Hilal") {
+    s17$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Hilal") {
+      s17$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Nassr") {
+    s17$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Nassr") {
+      s17$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Taawoun") {
+    s17$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Taawoun") {
+      s17$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Faisaly") {
+    s17$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Faisaly") {
+      s17$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Qadisiyah") {
+    s17$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Qadisiyah") {
+      s17$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Fayha") {
+    s17$PosH[i] <- Fayha[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Fayha") {
+      s17$PosA[i] <- Fayha[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Ettifaq") {
+    s17$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Ettifaq") {
+      s17$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Fateh") {
+    s17$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Fateh") {
+      s17$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=182){
+  if(s17$Home[i] == "Al-Shabab") {
+    s17$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s17$Away[i] == "Al-Shabab") {
+      s17$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+
+
+#Season2018 (Has to additional teams whcih means:
+# Teams = 16 instead of 14
+# Games = 240 instead of 182 (30 fixtures not 26)
+Nassr<- c(1,1,3,2,2,1,1,2,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,1,1)
+Hilal<- c(1,2,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,2,2)
+Taawoun<- c(1,9,7,7,7,7,6,6,7,7,6,5,4,3,4,4,6,6,5,6,5,4,4,4,4,4,4,4,4,4)
+Ahli<- c(1,6,5,3,4,3,3,3,2,3,3,3,3,4,5,5,4,4,4,3,4,5,5,5,5,5,5,5,5,5)
+Shabab<- c(1,3,2,5,5,5,8,7,5,4,5,6,6,5,3,3,3,3,3,4,3,3,3,3,3,3,3,3,3,3)
+Faisaly<- c(1,5,12,9,8,11,12,10,8,8,9,9,8,9,7,7,7,8,8,9,8,8,8,8,7,6,7,6,6,6)
+Wehda<- c(1,13,10,6,6,4,4,4,4,5,4,4,5,6,6,6,5,5,6,5,6,6,6,6,6,7,6,7,7,7)
+Raed<- c(1,8,13,13,13,9,10,11,10,9,11,8,10,11,11,9,9,10,10,11,10,10,10,10,10,10,10,10,9,9)
+Fateh<- c(1,10,9,11,10,8,7,8,9,10,8,10,7,8,10,11,11,9,11,8,7,7,7,7,8,8,8,8,8,8)
+Ittihad<- c(1,16,16,16,15,16,16,16,16,16,16,16,16,15,15,15,15,15,15,15,15,15,15,14,13,13,13,12,11,10)
+Ettifaq<- c(1,7,6,4,3,6,5,5,6,6,7,7,9,7,9,8,8,7,7,7,9,9,9,9,9,9,9,9,10,11)
+Fayha<- c(1,15,14,12,16,14,14,13,12,11,10,11,12,13,12,12,13,14,14,14,14,14,13,15,15,15,14,13,13,13)
+Hazem<- c(1,11,8,8,11,10,9,9,11,12,13,13,13,12,13,13,12,13,12,12,12,12,12,12,12,11,12,11,12,12)
+Qadisiyah<- c(1,12,4,10,9,12,11,12,15,14,12,12,11,10,8,10,10,11,9,10,11,11,11,11,11,12,11,14,14,14)
+Batin<- c(1,4,11,14,12,13,13,14,13,13,14,14,14,14,14,14,14,12,13,13,13,13,14,13,14,14,15,15,15,15)
+Ohod<- c(1,14,15,15,14,15,15,15,14,15,15,15,15,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16)
+
+
+##1
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Batin") {
+    s18$PosH[i] <- Batin[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Batin") {
+      s18$PosA[i] <- Batin[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Ohod") {
+    s18$PosH[i] <- Ohod[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Ohod") {
+      s18$PosA[i] <- Ohod[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Raed") {
+    s18$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Raed") {
+      s18$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Ittihad") {
+    s18$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Ittihad") {
+      s18$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Ahli") {
+    s18$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Ahli") {
+      s18$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Hilal") {
+    s18$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Hilal") {
+      s18$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Nassr") {
+    s18$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Nassr") {
+      s18$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Taawoun") {
+    s18$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Taawoun") {
+      s18$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Faisaly") {
+    s18$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Faisaly") {
+      s18$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Qadisiyah") {
+    s18$PosH[i] <- Qadisiyah[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Qadisiyah") {
+      s18$PosA[i] <- Qadisiyah[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Fayha") {
+    s18$PosH[i] <- Fayha[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Fayha") {
+      s18$PosA[i] <- Fayha[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Ettifaq") {
+    s18$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Ettifaq") {
+      s18$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Fateh") {
+    s18$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Fateh") {
+      s18$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Shabab") {
+    s18$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Shabab") {
+      s18$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+##15
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Hazem") {
+    s18$PosH[i] <- Hazem[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Hazem") {
+      s18$PosA[i] <- Hazem[j]
+      j=j+1}
+  i=i+1}
+
+
+##16
+i=1
+j=1
+while (i<=240){
+  if(s18$Home[i] == "Al-Wehda") {
+    s18$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s18$Away[i] == "Al-Wehda") {
+      s18$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+
+
+# Season2019 (until COVID19)
+Nassr<- c(1,3,3,6,2,6,5,5,2,2,3,2,2,1,2,1,2,2,2,2,2)
+Hilal<- c(1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,2,1,1,1,1,1)
+Taawoun<- c(1,8,12,4,9,8,6,7,7,5,4,6,4,7,5,5,4,5,6,6,7)
+Ahli<- c(1,6,5,5,11,5,3,3,5,3,2,4,3,4,3,3,3,3,3,3,3)
+Shabab<- c(1,5,6,10,7,12,9,6,3,6,7,9,10,9,9,9,7,8,8,8,8)
+Faisaly<- c(1,10,10,2,5,2,4,4,6,4,6,5,5,8,8,7,8,7,7,7,6)
+Wehda<- c(1,16,14,9,12,4,2,2,4,7,5,3,6,3,6,4,6,4,4,4,4)
+Raed<- c(1,14,15,15,15,14,13,14,13,10,10,7,7,6,4,6,5,6,5,5,5)
+Fateh<- c(1,13,13,16,16,16,16,15,15,15,15,16,14,14,14,14,15,15,16,14,14)
+Ittihad<- c(1,2,2,8,4,3,8,9,11,13,12,13,13,13,13,13,12,13,13,13,12)
+Ettifaq<- c(1,4,9,7,3,11,12,12,10,11,13,11,12,10,10,11,11,11,12,11,10)
+Fayha<- c(1,11,7,11,6,13,14,13,12,12,11,12,9,11,11,10,10,10,11,10,9)
+Hazem<- c(1,7,11,14,14,10,7,8,8,8,8,10,11,12,12,12,13,12,10,12,13)
+Adalah<- c(1,9,4,3,8,7,10,11,14,14,14,14,15,15,15,15,14,14,15,15,16)
+Abha<- c(1,12,8,12,10,9,11,10,9,9,9,8,8,5,7,8,9,9,9,9,11)
+Damac<- c(1,15,16,13,13,15,15,16,16,16,16,15,16,16,16,16,16,16,14,16,15)
+
+##1
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Adalah") {
+    s19$PosH[i] <- Adalah[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Adalah") {
+      s19$PosA[i] <- Adalah[j]
+      j=j+1}
+  i=i+1}
+
+##2
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Abha") {
+    s19$PosH[i] <- Abha[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Abha") {
+      s19$PosA[i] <- Abha[j]
+      j=j+1}
+  i=i+1}
+##3
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Raed") {
+    s19$PosH[i] <- Raed[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Raed") {
+      s19$PosA[i] <- Raed[j]
+      j=j+1}
+  i=i+1}
+##4
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Ittihad") {
+    s19$PosH[i] <- Ittihad[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Ittihad") {
+      s19$PosA[i] <- Ittihad[j]
+      j=j+1}
+  i=i+1}
+
+##5
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Ahli") {
+    s19$PosH[i] <- Ahli[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Ahli") {
+      s19$PosA[i] <- Ahli[j]
+      j=j+1}
+  i=i+1}
+
+##6
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Hilal") {
+    s19$PosH[i] <- Hilal[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Hilal") {
+      s19$PosA[i] <- Hilal[j]
+      j=j+1}
+  i=i+1}
+
+##7
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Nassr") {
+    s19$PosH[i] <- Nassr[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Nassr") {
+      s19$PosA[i] <- Nassr[j]
+      j=j+1}
+  i=i+1}
+
+
+##8
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Taawoun") {
+    s19$PosH[i] <- Taawoun[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Taawoun") {
+      s19$PosA[i] <- Taawoun[j]
+      j=j+1}
+  i=i+1}
+
+##9
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Faisaly") {
+    s19$PosH[i] <- Faisaly[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Faisaly") {
+      s19$PosA[i] <- Faisaly[j]
+      j=j+1}
+  i=i+1}
+
+##10
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Damac") {
+    s19$PosH[i] <- Damac[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Damac") {
+      s19$PosA[i] <- Damac[j]
+      j=j+1}
+  i=i+1}
+
+##11
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Fayha") {
+    s19$PosH[i] <- Fayha[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Fayha") {
+      s19$PosA[i] <- Fayha[j]
+      j=j+1}
+  i=i+1}
+
+
+##12
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Ettifaq") {
+    s19$PosH[i] <- Ettifaq[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Ettifaq") {
+      s19$PosA[i] <- Ettifaq[j]
+      j=j+1}
+  i=i+1}
+
+##13
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Fateh") {
+    s19$PosH[i] <- Fateh[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Fateh") {
+      s19$PosA[i] <- Fateh[j]
+      j=j+1}
+  i=i+1}
+##14
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Shabab") {
+    s19$PosH[i] <- Shabab[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Shabab") {
+      s19$PosA[i] <- Shabab[j]
+      j=j+1}
+  i=i+1}
+
+##15
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Hazem") {
+    s19$PosH[i] <- Hazem[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Hazem") {
+      s19$PosA[i] <- Hazem[j]
+      j=j+1}
+  i=i+1}
+
+
+##16
+i=1
+j=1
+while (i<=165){
+  if(s19$Home[i] == "Al-Wehda") {
+    s19$PosH[i] <- Wehda[j]
+    j=j+1 }
+    else if (s19$Away[i] == "Al-Wehda") {
+      s19$PosA[i] <- Wehda[j]
+      j=j+1}
+  i=i+1}
+
+
+
+```
+#Merge all the seasons
+Let's now merge them
+```{r}
+try <- bind_rows(s10, s11, s12, s13, s14, s15, s16, s17,s18, s19)
+SPL_Features <- try
+remove(try)
+```
+Save workspace CapstoneV3 and the file
+
+```{r}
+write_csv(SPL_Features, "SPL_V1.csv")
+```
+
+
+
