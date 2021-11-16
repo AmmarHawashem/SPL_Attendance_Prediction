@@ -9,7 +9,7 @@ The project is about building a machine learning model that predicts the attenda
 
 ## **HTML Page**
 
-https://ammarhawashem.github.io/DS_Capstone_ML_TS/CapstoneT.html
+https://ammarhawashem.github.io/SPL_Attendance_Prediction/CapstoneFinalVersion.html
 
 ## **Files**
 
