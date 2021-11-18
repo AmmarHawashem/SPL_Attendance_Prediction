@@ -2,6 +2,7 @@
 title: "DS_Capstone"
 author: "Ammar Al-Hawashem"
 date: "11/6/2021"
+df_print: paged0
 output:
   html_document:
     theme: cerulean
@@ -13,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-## **Part1: Introduction**
+# **Part1: Introduction**
 
 ### What is the project?
 The project is to build  Machine Learning models that predict the number of attendance of each Weekly game of Suadi Professional League (SPL). 1861 games are used to build the models which represent all the attendance records since it became mandatory in 2010 until the suspension of the league due to COVID19 in 03/2020.
@@ -58,7 +59,7 @@ This project can be useful for many sectors such as:
 14-RH | % of Relative Humidity (estimated from the Temperature and Dew Point)
 15-Families | Were women were allowed to attend? (12-01-2018)
 16- LaggedAttendance | Attendance one home match earlier 
-17- GameImp | Game importance (4 categories)
+17- GameImp | Game importance (3 categories)
 
 ### What is the target?
 Attendance | The number of spectators in that game
@@ -109,7 +110,7 @@ Let's Load the  dataset to our environment:
 SPL <- readr::read_csv("SPL_F1.csv")
 ```
 
-## **Part2: Study the dataset**
+# **Part2: Study the dataset**
 
 ### Skim the dataset
 I Always like to use skimr::skim() to have a great view of the data:
@@ -281,7 +282,7 @@ SPL_DF %>%
 ```
 
 
-## **Part3: EDA**
+# **Part3: EDA**
 Discover how the attendance changes with the rank & week
 ```{r}
 #Need to be revised 
@@ -573,10 +574,10 @@ ggplot( aes(x=Season, y=Attendance, fill=Season))+
 However, seasons will not be considered as a feature in our model since we are seeking a general one.
 
 
-## **Part4: Build models with CV folds resmapling**
+# **Part4: Build models with CV folds resmapling**
 
 
-# Split
+## Split
 ```{r}
 
 SPL_DF %>%
@@ -604,8 +605,8 @@ FOLDS <- vfold_cv(TRAIN, strata =  Attendance)
 
 
 ```
-# Models
-## Model_4.1: Random Forest
+## Models
+### Model_4.1: Random Forest
 
 ```{r}
  # Recipe is used to build the feature engineering steps. We have to specify the formula and the data which is the training 
@@ -620,7 +621,7 @@ FOLDS <- vfold_cv(TRAIN, strata =  Attendance)
 # 1- the depth (think of it as the number the number of questions)
 # 2- the minumum number of observations in the terminal nodes(leaves)
 # 3- Number of trees
-  rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
+  rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
   set_mode("regression") %>% 
   set_engine("ranger")-> ranger_spec
 
@@ -629,12 +630,20 @@ FOLDS <- vfold_cv(TRAIN, strata =  Attendance)
   add_recipe(ranger_recipe) %>% 
   add_model(ranger_spec) -> ranger_workflow
 
+  
+# create the hyperparameter grid
+hyper_grid <- expand.grid(
+  mtry = floor(17 * c(.05, .15, .25, .333, .4, 0.5, 0.75)),
+  min_n = c(1, 3, 5, 10)
+  )
+# Where 17 is the total number of features
+
 
 set.seed(51510)
 ranger_tune<-
-   tune_grid(ranger_workflow,
+   tune_race_anova(ranger_workflow,
              resamples = FOLDS, 
-             grid =10) # to choose 10 grid points automatically
+             grid = hyper_grid) # to choose 10 grid points automatically
 
 # Let's see the result of the loss functions and the tuning results
 show_best(ranger_tune, metric = "rmse")
@@ -672,8 +681,9 @@ workflow() %>%
   vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
 ```
 
+From Predicted Vs Truth plot,  Bad performance with low attendance
 
-## Model_4.2: GLMNET
+### Model_4.2: GLMNET
  Let's try another algorithm which is generalized linear model (GLMNET)
  Which is Regularized linear model
  
@@ -743,8 +753,10 @@ workflow() %>%
   vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
 ```
 
+From Predicited Vs Truth plot,  Bad performance with low attendance
 
-## Model_4.3 XG Boots
+
+### Model_4.3 XG Boots
 Let's try a third algorithm which am XGBoot
 
 ```{r}
@@ -757,32 +769,49 @@ Let's try a third algorithm which am XGBoot
   step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) -> xgboost_recipe
  #XGBoot prefers one hot than dummy variables
 
-  boost_tree(trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), 
-    loss_reduction = tune(), sample_size = tune()) %>% 
-  set_mode("regression") %>% 
-  set_engine("xgboost") -> xgboost_spec
+  
+
+stopping_spec <-
+  boost_tree(
+    trees = 500,
+    mtry = tune(),
+    learn_rate = tune(),
+    stop_iter = tune()
+  ) %>%
+  set_engine("xgboost", validation = 0.2) %>%
+  set_mode("regression")
+
+stopping_grid <-
+  grid_latin_hypercube(
+    mtry(range = c(5L, 17L)), ## depends on number of columns in data
+    learn_rate(range = c(-5, -1)), ## keep pretty big
+    stop_iter(range = c(10L, 50L)), ## bigger than default
+    size = 10
+  )
+
+# Where 17 is the total number of features
+
+# Now we can put these together in a workflow and tune across the grid of parameters and our resamples.
+
+early_stop_wf <- workflow(xgboost_recipe, stopping_spec)
+
+set.seed(345)
+stopping_rs <- tune_grid(
+  early_stop_wf,
+  FOLDS,
+  grid = stopping_grid,
+)
 
 
-xgboost_workflow <- 
-  workflow() %>% 
-  add_recipe(xgboost_recipe) %>% 
-  add_model(xgboost_spec) 
-
-set.seed(81043)
-xgboost_tune <-
-  tune_grid(xgboost_workflow,
-                  resamples = FOLDS,
-                  grid = 10,
-                 )
-
-show_best(xgboost_tune, metric = "rmse")
-show_best(xgboost_tune, metric = "rsq")
-autoplot(xgboost_tune)
+show_best(stopping_rs, metric = "rmse")
+show_best(stopping_rs, metric = "rsq")
+autoplot(stopping_rs)
 ```
+
 ```{r}
 #Select the hyperparameters  of the one who has the  minimum rmse 
-final_XG <- xgboost_workflow %>%
-  finalize_workflow(select_best(xgboost_tune, metric = "rmse"))
+final_XG <- early_stop_wf %>%
+  finalize_workflow(select_best(stopping_rs, metric = "rmse"))
 
 fit_XG <- last_fit(final_XG, SPLIT)
 fit_XG
@@ -795,8 +824,8 @@ collect_predictions(fit_XG) %>%
   coord_fixed()
 
 # VIP 
-imp_spec_XG <- xgboost_spec %>%
-  finalize_model(select_best(xgboost_tune)) %>%
+imp_spec_XG <- stopping_spec %>%
+  finalize_model(select_best(stopping_rs)) %>%
   set_engine("xgboost", importance = "permutation")
 
 workflow() %>%
@@ -808,7 +837,10 @@ workflow() %>%
 
 ```
 
-## Model_4.4 KNN
+From Predicted Vs Truth plot,  Bad performance with low attendance
+
+
+### Model_4.4 KNN
 Let's try a forth algorithm which is KNN
 
 ```{r}
@@ -869,11 +901,17 @@ imp_spec_knn <- knn_spec %>%
 
 ```
 
+From Predicted Vs Truth plot,  Bad performance with low attendance
 
-## **Part5: Build models with Bootstrapping resmapling**
+So all  the models have:
+1- performed awful with low attendance
+2- Has training RMSE higher than the one of the testing set
+Also, they have similar important features execpt GLMNET
+
+# **Part5: Build models with Bootstrapping resmapling**
 
 
-# Split
+## Split
 ```{r}
 
 
@@ -885,8 +923,8 @@ FOLDS_B <- bootstraps(TRAIN, strata =  Attendance)
 
 
 ```
-# Models_Bootstraping
-## Model_5.1: Random Forest
+## Models_Bootstraping
+### Model_5.1: Random Forest
 
 ```{r}
  # Recipe is used to build the feature engineering steps. We have to specify the formula and the data which is the training 
@@ -911,11 +949,19 @@ FOLDS_B <- bootstraps(TRAIN, strata =  Attendance)
   add_model(ranger_spec_B) -> ranger_workflow_B
 
 # I'll use a racing method to eliminate the combinations that did awful in the initial resamples. 
+# create the hyperparameter grid
+hyper_grid_B <- expand.grid(
+  mtry = floor(17 * c(.05, .15, .25, .333, .4, 0.5, 0.75)),
+  min_n = c(1, 3, 5, 10),
+  trees = c(900,1000,1100,1200)
+  )
+# Where 17 is the total number of features
+
 set.seed(51510)
 ranger_tune_B<-
-   tune_grid(ranger_workflow_B,
+   tune_race_anova(ranger_workflow_B,
              resamples = FOLDS_B, 
-             grid =10) # to choose 10 grid points automatically
+             grid = hyper_grid_B) 
 
 # Let's see the result of the loss functions and the tuning results
 show_best(ranger_tune_B, metric = "rmse")
@@ -954,7 +1000,7 @@ workflow() %>%
 ```
 
 
-## Model_5.2: GLMNET
+### Model_5.2: GLMNET
  Let's try another algorithm which is generalized linear model (GLMNET)
  Which is Regularized linear model
  
@@ -1025,7 +1071,7 @@ workflow() %>%
 ```
 
 
-## Model_5.3 XG Boots
+### Model_5.3 XG Boots
 Let's try a third algorithm which am XGBoot
 
 ```{r}
@@ -1038,32 +1084,50 @@ Let's try a third algorithm which am XGBoot
   step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) -> xgboost_recipe_B
  #XGBoot prefers one hot than dummy variables
 
-  boost_tree(trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), 
-    loss_reduction = tune(), sample_size = tune()) %>% 
-  set_mode("regression") %>% 
-  set_engine("xgboost") -> xgboost_spec_B
 
 
-xgboost_workflow_B <- 
-  workflow() %>% 
-  add_recipe(xgboost_recipe_B) %>% 
-  add_model(xgboost_spec_B) 
+stopping_spec_B <-
+  boost_tree(
+    trees = 500,
+    mtry = tune(),
+    learn_rate = tune(),
+    stop_iter = tune()
+  ) %>%
+  set_engine("xgboost", validation = 0.2) %>%
+  set_mode("regression")
 
-set.seed(81043)
-xgboost_tune_B <-
-  tune_grid(xgboost_workflow_B,
-                  resamples = FOLDS_B,
-                  grid = 10,
-                  )
+stopping_grid_B <-
+  grid_latin_hypercube(
+    mtry(range = c(5L, 17L)), ## depends on number of columns in data
+    learn_rate(range = c(-5, -1)), ## keep pretty big
+    stop_iter(range = c(10L, 50L)), ## bigger than default
+    size = 10
+  )
+# Where 17 is the total number of features
 
-show_best(xgboost_tune_B, metric = "rmse")
-show_best(xgboost_tune_B, metric = "rsq")
-autoplot(xgboost_tune_B)
+
+# Now we can put these together in a workflow and tune across the grid of parameters and our resamples.
+
+early_stop_wf_B <- workflow(xgboost_recipe_B, stopping_spec_B)
+
+doParallel::registerDoParallel()
+set.seed(345)
+stopping_rs_B <- tune_grid(
+  early_stop_wf_B,
+  FOLDS_B,
+  grid = stopping_grid_B,
+)
+
+
+show_best(stopping_rs_B, metric = "rmse")
+show_best(stopping_rs_B, metric = "rsq")
+autoplot(stopping_rs_B)
 ```
+
 ```{r}
 #Select the hyperparameters  of the one who has the  minimum rmse 
-final_XG_B <- xgboost_workflow %>%
-  finalize_workflow(select_best(xgboost_tune, metric = "rmse"))
+final_XG_B <- early_stop_wf_B %>%
+  finalize_workflow(select_best(stopping_rs_B, metric = "rmse"))
 
 fit_XG_B <- last_fit(final_XG_B, SPLIT)
 fit_XG_B
@@ -1076,8 +1140,8 @@ collect_predictions(fit_XG_B) %>%
   coord_fixed()
 
 # VIP 
-imp_spec_XG_B <- xgboost_spec_B %>%
-  finalize_model(select_best(xgboost_tune_B)) %>%
+imp_spec_XG_B <- stopping_spec_B %>%
+  finalize_model(select_best(stopping_rs_B)) %>%
   set_engine("xgboost", importance = "permutation")
 
 workflow() %>%
@@ -1089,7 +1153,7 @@ workflow() %>%
 
 ```
 
-## Model_5.4 KNN
+### Model_5.4 KNN
 Let's try a forth algorithm which is KNN
 
 ```{r}
@@ -1150,30 +1214,32 @@ imp_spec_knn_B <- knn_spec_B %>%
 
 ```
 
+Similar reulsts to the cv folds resampling but with higher differences of the Loss Function
 
 
 
+# **Part6: Conclusion**
 
-## **Part6: Conclusion**
+According to the introduction, predicting the attendance of an SPL game have many perks. For that purpose,four algorithms  which are KNN, Random Forest, XGBoost, and GLMNET have been tuned and used to build models with both cv fold and bootstrapping resampling methods. All of them have accepted RSME values (not high). However, it is noticed that all of them tend to perform badly with law attendance. Moreover, unfortunately in all of them the training set's RMSE is higher than the one of the testing set. This is most probability due to a couple of reasons:
+1-  Having a small dataset
+2- The assumption of having a constant twitter followers (H & A) since they appeared in most the models as the top important features
 
-According to the introduction, predicting the attendance of an SPL game have many perks. For that purpose,four algorithms  which are KNN, Random Forest, XGBoost, and GLMNET have been tuned and used to build models with both cv fold and bootstrapping. Unfortunately, all of them gave smaller loss function "rsme" in the training set than in the testing set. the Best one was the KNN model with cv folds with  0.887 in the training set & 0.846 in the testing test.
-The main reason for this is the penalty of having a small dataset.
-
-## **Part7: Limitations & Problems**
+# **Part7: Limitations & Problems**
 
 - Small Dataset
 - Not well-rounded features considered
+- Using a rough assumption 
+-  Take much time to run the code since it consists od 8 models, which make it try things.
 
 
-
-## **Part8: Future Development**
+# **Part8: Future Development**
 
 There are some opportunities to enhance the models via:
 
 - Adding more matches to solve the problem of having small dataset
 - Adding Price Tickets as a feature
-- Updating Twitter Followers after each transfer window
+- Updating Twitter Followers after each transfer window (Twice a season)
 - Adding the Distance between the venue and the downtown as a feature
 - Adding the total points after each round as a feature
 
-
+Also remember that this project can be deployed with any soccer league not just the SPL
