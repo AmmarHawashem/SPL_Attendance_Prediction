@@ -32,10 +32,16 @@ library(chron)
 library(lubridate)
 
 # Import 1st resource  data ----
-s10 <- read_csv("SPL/10/10.csv")
-s11 <- read_csv("SPL/11/11.csv")
-s12 <- read_csv("SPL/12/12.csv")
-s13 <- read_csv("SPL/13/13.csv")
+# s10 <- read_csv("SPL/10/10.csv")
+# s11 <- read_csv("SPL/11/11.csv")
+# s12 <- read_csv("SPL/12/12.csv")
+# s13 <- read_csv("SPL/13/13.csv")
+# Directly from github
+s10 <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/10/10.csv")
+s11 <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/11/11.csv")
+s12 <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/12/12.csv")
+s13 <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/13/13.csv")
+
 
 # Scrape 2nd reource data ----
 ## Scrape 2014 ----
