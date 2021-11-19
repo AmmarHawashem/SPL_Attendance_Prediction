@@ -33,9 +33,17 @@ library(stringr)
 ```
 
 #Import the dataset
+
+This is the ouput of "PreCapstone" fie. From the folder
 ```{r}
-read.csv("SPL.csv") -> SPL
+#read.csv("SPL.csv") -> SPL
 ```
+
+Or directly from github
+```{r}
+SPL <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/SPL.csv")
+```
+
 
 quick look into the dataset
 ```{r}
