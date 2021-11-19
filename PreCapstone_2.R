@@ -25,8 +25,11 @@ library(stringr)
 # The rest observations were filled up manually via weather websites
 
 # Import the data ----
-# This is file that we've saved at the end of "PreCapstoneFeatures" file
-SPL_Features <- read_csv("SPL/SPL_V1.csv")
+# This is file that we've saved at the end of "PreCapstone_1" file
+# SPL_Features <- read_csv("SPL/SPL_V1.csv")
+# Or directly from github
+SPL_Features <- read_csv("https://raw.githubusercontent.com/AmmarHawashem/SPL_Attendance_Prediction/main/SPL/SPL_V1.csv")
+
 
 # Add empty columns for the features
 SPL_Features <- SPL_Features %>%
