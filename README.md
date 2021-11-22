@@ -1,5 +1,5 @@
 
-![alt text](https://alioh.github.io/images/2019-5-24/spl.png)
+![alt text](https://user-images.githubusercontent.com/89712523/142946528-b5341646-3d22-4025-b6ab-d1fc9e39f28e.jpg)
 
 # SPL_Attendance_Prediction
 
